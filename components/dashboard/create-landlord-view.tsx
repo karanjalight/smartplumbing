@@ -426,9 +426,12 @@ export function CreateLandlordView() {
               portal credentials to share securely after creation.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-3 lg:items-end" aria-hidden>
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-[#0A4266]/10 dark:bg-[#6BB4E8]/15 lg:size-20">
-              <Building2 className="size-8 text-[#0A4266] dark:text-[#6BB4E8] lg:size-10" />
+          <div
+            className=""
+            aria-hidden
+          >
+            <div className="flex items-end gap-3">
+              <img src="/img/create-user.png" alt="Tenant icon" className="w-full lg:h-40 dark:invert object-cover" />
             </div>
           </div>
         </div>
