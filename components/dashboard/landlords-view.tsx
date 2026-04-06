@@ -297,8 +297,8 @@ export function LandlordsView() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative w-1/2 min-w-0">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-md">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden
@@ -316,9 +316,7 @@ export function LandlordsView() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-medium text-muted-foreground">Filter:</div>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:max-w-xl">
             <div ref={payoutMenuRef} className="relative min-w-0">
               <button
                 type="button"
@@ -508,171 +506,122 @@ export function LandlordsView() {
             </div>
           </div>
         </div>
-      </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm dark:border-border/80">
         <div className="border-b border-border px-4 py-3 dark:border-border/80">
           <p className="text-sm font-medium text-foreground">Landlord directory</p>
+          <p className="text-xs text-muted-foreground">
+            Organization, contacts, portfolio footprint, billing, settlements, and risk signals — each in its own column.
+          </p>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-0 text-left text-sm">
+          <table className="w-full min-w-[1180px] text-left text-sm">
             <thead>
               <tr className="bg-[#0A4266] text-white dark:bg-[#0d4d73]">
-                <th className="min-w-[200px] px-4 py-3 font-semibold">
-                  Landlord
-                </th>
-                <th className="min-w-[160px] px-4 py-3 font-semibold">
-                  Region & portfolio
-                </th>
-                <th className="min-w-[200px] px-4 py-3 font-semibold">
-                  Revenue & payouts
-                </th>
-                <th className="w-[1%] whitespace-nowrap px-4 py-3 font-semibold text-right">
-                  Alerts & actions
-                </th>
+                <th className="px-4 py-3 font-semibold">Organization</th>
+                <th className="px-4 py-3 font-semibold">Primary contact</th>
+                <th className="px-4 py-3 font-semibold">Account status</th>
+                <th className="px-4 py-3 font-semibold">Region</th>
+                <th className="px-4 py-3 font-semibold">Portfolio</th>
+                <th className="px-4 py-3 font-semibold">Water revenue</th>
+                <th className="px-4 py-3 font-semibold">Settlement</th>
+                <th className="px-4 py-3 font-semibold">Alerts</th>
+                <th className="px-4 py-3 font-semibold">Profile</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {pageRows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={4}
-                    className="px-4 py-12 text-center text-muted-foreground"
-                  >
+                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                     No landlords match your search or filters.
                   </td>
                 </tr>
               ) : (
                 pageRows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="bg-card transition-colors hover:bg-muted/40"
-                  >
+                  <tr key={row.id} className="bg-card transition-colors hover:bg-muted/40">
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-start gap-2">
-                        <Building2
-                          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="font-semibold leading-snug text-foreground">
-                            {row.company}
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#0A4266]/15 dark:bg-[#6BB4E8]/20">
+                          <Building2 className="size-4 text-[#0A4266] dark:text-[#6BB4E8]" aria-hidden />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-semibold leading-snug text-foreground">{row.company}</div>
+                          <div className="font-mono text-xs text-muted-foreground">{row.id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="max-w-[200px] px-4 py-3 align-top">
+                      <div className="text-sm font-medium text-foreground">{row.name}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{row.phone}</div>
+                      <div className="truncate text-xs text-muted-foreground" title={row.email}>
+                        {row.email}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <LandlordStatusBadge status={row.status} />
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <span className="inline-flex items-start gap-1.5 text-sm text-foreground">
+                        <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                        {row.region}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 align-top tabular-nums text-sm">
+                      <div className="text-foreground">
+                        <span className="font-medium">{row.propertiesCount}</span>
+                        <span className="text-muted-foreground"> prop.</span>
+                      </div>
+                      <div className="mt-0.5 text-muted-foreground">
+                        <span className="font-medium text-foreground">{row.tenantsCount}</span> tenants
+                      </div>
+                      <div className="mt-0.5 text-muted-foreground">
+                        <span className="font-medium text-foreground">{row.linkedMetersCount}</span> meters
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="font-semibold tabular-nums text-foreground">
+                        {formatKes(row.monthlyCollectionKes)}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">/ mo</span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">Platform water roll-up (mock)</p>
+                    </td>
+                    <td className="min-w-[140px] px-4 py-3 align-top">
+                      <p className="text-sm font-medium text-foreground">{payoutLabel(row.payoutSchedule)}</p>
+                      <div className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <Calendar className="mt-0.5 size-3.5 shrink-0 opacity-80" aria-hidden />
+                        <div className="space-y-1 leading-snug">
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wide">Last</span>{" "}
+                            <span className="text-foreground">{row.lastPayoutDate ?? "—"}</span>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.name}
-                            <span className="text-border"> · </span>
-                            {row.phone}
-                          </div>
-                          <div
-                            className="truncate text-xs text-muted-foreground"
-                            title={row.email}
-                          >
-                            {row.email}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                            <span className="font-mono text-[11px] font-medium text-muted-foreground">
-                              {row.id}
-                            </span>
-                            <LandlordStatusBadge status={row.status} />
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wide">Next</span>{" "}
+                            <span className="text-foreground">{row.nextPayoutDate}</span>
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <div className="flex items-start gap-2">
-                        <MapPin
-                          className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <div className="min-w-0 space-y-1">
-                          <div className="font-medium leading-snug text-foreground">
-                            {row.region}
-                          </div>
-                          <p className="text-xs leading-relaxed text-muted-foreground tabular-nums">
-                            <span className="text-foreground">
-                              {row.propertiesCount}
-                            </span>{" "}
-                            propert
-                            {row.propertiesCount === 1 ? "y" : "ies"}
-                            <span className="text-border"> · </span>
-                            <span className="text-foreground">
-                              {row.tenantsCount}
-                            </span>{" "}
-                            tenant
-                            {row.tenantsCount === 1 ? "" : "s"}
-                            <span className="text-border"> · </span>
-                            <span className="text-foreground">
-                              {row.linkedMetersCount}
-                            </span>{" "}
-                            meter
-                            {row.linkedMetersCount === 1 ? "" : "s"}
-                          </p>
-                        </div>
-                      </div>
+                      {row.openAlertsCount > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                          <AlertTriangle className="size-3" aria-hidden />
+                          {row.openAlertsCount}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">None</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <div className="space-y-1.5">
-                        <div className="font-semibold tabular-nums text-foreground">
-                          {formatKes(row.monthlyCollectionKes)}
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                            / mo
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground">
-                            {payoutLabel(row.payoutSchedule)}
-                          </span>
-                          <span> settlement</span>
-                        </p>
-                        <div className="flex items-start gap-2 text-xs">
-                          <Calendar
-                            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-                            aria-hidden
-                          />
-                          <div className="space-y-0.5 leading-snug text-muted-foreground">
-                            <div>
-                              <span className="text-[10px] uppercase tracking-wide">
-                                Last
-                              </span>{" "}
-                              <span className="text-foreground">
-                                {row.lastPayoutDate ?? "—"}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] uppercase tracking-wide">
-                                Next
-                              </span>{" "}
-                              <span className="text-foreground">
-                                {row.nextPayoutDate}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-top text-right">
-                      <div className="flex flex-col items-end gap-2">
-                        {row.openAlertsCount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-                            <AlertTriangle className="size-3" aria-hidden />
-                            {row.openAlertsCount} alert
-                            {row.openAlertsCount === 1 ? "" : "s"}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            No open alerts
-                          </span>
+                      <Link
+                        href={`/dashboard/landlords/${encodeURIComponent(row.id)}`}
+                        className={cn(
+                          buttonVariants({ variant: "outline", size: "sm" }),
+                          "h-7 rounded-full px-3 text-xs"
                         )}
-                        <Link
-                          href={`/dashboard/landlords/${encodeURIComponent(row.id)}`}
-                          className={cn(
-                            "inline-flex h-7 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-muted dark:border-border/80"
-                          )}
-                        >
-                          View Details
-                        </Link>
-                      </div>
+                      >
+                        View
+                      </Link>
                     </td>
                   </tr>
                 ))

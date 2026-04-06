@@ -3,9 +3,9 @@
  * Aligned to PROJECT_PROPOSAL + API docs (STS water prepay, meter health, abnormal alerts).
  */
 
-import { getBuildings } from "@/lib/buildings-data";
+import { getBuildings, type BuildingListRow } from "@/lib/buildings-data";
 import { getLandlordRows } from "@/lib/landlords-data";
-import { MOCK_TENANTS, TABLE_PAGE_SIZE_OPTIONS } from "@/lib/tenants-data";
+import { MOCK_TENANTS, TABLE_PAGE_SIZE_OPTIONS, type TenantRow } from "@/lib/tenants-data";
 
 export type MeterLifecycleStatus = "active" | "inactive" | "fault" | "maintenance";
 export type MeterConnectivity = "online" | "offline" | "intermittent";
@@ -13,6 +13,8 @@ export type MeterModelType = "water_prepay_m3" | "water_prepay_currency" | "post
 
 export type MeterRow = {
   meterId: string;
+  /** Physical / manufacturer serial for inventory (mock-derived from meter ID). */
+  serialNumber: string;
   modelType: MeterModelType;
   status: MeterLifecycleStatus;
   connectivity: MeterConnectivity;
@@ -121,33 +123,43 @@ export function meterTypeLabel(modelType: MeterModelType): string {
   return "Postpay";
 }
 
+/** Build a meter row from tenant + building directory (used by admin list + landlord merged views). */
+export function buildMeterRowFromTenant(
+  tenant: TenantRow,
+  buildings: BuildingListRow[],
+  landlordCompany: string | null
+): MeterRow {
+  const building = buildings.find((b) => b.name === tenant.property);
+  const generated = deterministicMeta(tenant.meterId);
+  const meta = { ...generated, ...(META_OVERRIDES[tenant.meterId] ?? {}) };
+
+  return {
+    meterId: tenant.meterId,
+    serialNumber: `SN-${tenant.meterId.replace(/\D/g, "").slice(-8).padStart(8, "0")}`,
+    modelType: meta.modelType!,
+    status: meta.status!,
+    connectivity: meta.connectivity!,
+    tenantId: tenant.id,
+    tenantName: tenant.name,
+    landlordId: tenant.landlordId,
+    landlordCompany,
+    buildingId: building?.id ?? null,
+    buildingName: tenant.property,
+    unitLabel: tenant.unit,
+    installedOn: meta.installedOn!,
+    latestReadingM3: meta.latestReadingM3 ?? null,
+    lastSyncAt: meta.lastSyncAt!,
+    openAlerts: meta.openAlerts ?? 0,
+  };
+}
+
 export function getMeterRows(): MeterRow[] {
   const buildings = getBuildings();
   const landlords = getLandlordRows();
 
   return MOCK_TENANTS.map((tenant) => {
-    const building = buildings.find((b) => b.name === tenant.property);
     const landlord = landlords.find((l) => l.id === tenant.landlordId);
-    const generated = deterministicMeta(tenant.meterId);
-    const meta = { ...generated, ...(META_OVERRIDES[tenant.meterId] ?? {}) };
-
-    return {
-      meterId: tenant.meterId,
-      modelType: meta.modelType!,
-      status: meta.status!,
-      connectivity: meta.connectivity!,
-      tenantId: tenant.id,
-      tenantName: tenant.name,
-      landlordId: tenant.landlordId,
-      landlordCompany: landlord?.company ?? null,
-      buildingId: building?.id ?? null,
-      buildingName: tenant.property,
-      unitLabel: tenant.unit,
-      installedOn: meta.installedOn!,
-      latestReadingM3: meta.latestReadingM3 ?? null,
-      lastSyncAt: meta.lastSyncAt!,
-      openAlerts: meta.openAlerts ?? 0,
-    };
+    return buildMeterRowFromTenant(tenant, buildings, landlord?.company ?? null);
   });
 }
 

@@ -8,6 +8,7 @@ import {
   Gauge,
   ListFilter,
   Plus,
+  Radar,
   Search,
   TriangleAlert,
   UserRound,
@@ -26,6 +27,7 @@ import {
   type MeterConnectivity,
   type MeterLifecycleStatus,
   type MeterModelType,
+  type MeterRow,
 } from "@/lib/meters-data";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +99,19 @@ function connectivityBadge(connectivity: MeterConnectivity) {
   );
 }
 
+function meterNeedsAttention(row: MeterRow): boolean {
+  return (
+    row.status === "fault" ||
+    row.status === "maintenance" ||
+    row.connectivity === "offline" ||
+    row.openAlerts > 0
+  );
+}
+
+function meterIsHealthy(row: MeterRow): boolean {
+  return row.status === "active" && row.connectivity === "online" && row.openAlerts === 0;
+}
+
 export function MetersView() {
   const allRows = useMemo(() => getMeterRows(), []);
 
@@ -104,7 +119,7 @@ export function MetersView() {
   const [statusFilter, setStatusFilter] = useState<"all" | MeterLifecycleStatus>("all");
   const [connectivityFilter, setConnectivityFilter] = useState<"all" | MeterConnectivity>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | MeterModelType>("all");
-  const [buildingCategory, setBuildingCategory] = useState<string>("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "attention" | "healthy">("all");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [statusQuery, setStatusQuery] = useState("");
   const [connectivityMenuOpen, setConnectivityMenuOpen] = useState(false);
@@ -146,6 +161,7 @@ export function MetersView() {
       if (!q) return true;
       return (
         r.meterId.toLowerCase().includes(q) ||
+        r.serialNumber.toLowerCase().includes(q) ||
         (r.tenantName ?? "").toLowerCase().includes(q) ||
         (r.tenantId ?? "").toLowerCase().includes(q) ||
         (r.buildingName ?? "").toLowerCase().includes(q) ||
@@ -156,21 +172,22 @@ export function MetersView() {
     });
   }, [allRows, search, statusFilter, connectivityFilter, typeFilter]);
 
-  const buildingCategories = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const row of matchesFiltersAndSearch) {
-      const key = row.buildingName ?? "Unassigned";
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, count]) => ({ name, count }));
+  const quickFilterCounts = useMemo(() => {
+    const base = matchesFiltersAndSearch;
+    return {
+      all: base.length,
+      attention: base.filter(meterNeedsAttention).length,
+      healthy: base.filter(meterIsHealthy).length,
+    };
   }, [matchesFiltersAndSearch]);
 
   const filtered = useMemo(() => {
-    if (buildingCategory === "all") return matchesFiltersAndSearch;
-    return matchesFiltersAndSearch.filter((r) => (r.buildingName ?? "Unassigned") === buildingCategory);
-  }, [matchesFiltersAndSearch, buildingCategory]);
+    return matchesFiltersAndSearch.filter((r) => {
+      if (quickFilter === "all") return true;
+      if (quickFilter === "attention") return meterNeedsAttention(r);
+      return meterIsHealthy(r);
+    });
+  }, [matchesFiltersAndSearch, quickFilter]);
 
   const statusOptions = useMemo(() => {
     const q = statusQuery.trim().toLowerCase();
@@ -187,15 +204,9 @@ export function MetersView() {
     return TYPE_FILTER_OPTIONS.filter((o) => !q || o.label.toLowerCase().includes(q) || o.hint.toLowerCase().includes(q) || o.key.includes(q));
   }, [typeQuery]);
 
-  useEffect(() => {
-    if (buildingCategory === "all") return;
-    const exists = buildingCategories.some((b) => b.name === buildingCategory);
-    if (!exists) setBuildingCategory("all");
-  }, [buildingCategories, buildingCategory]);
-
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
-  useEffect(() => setPage(1), [pageSize]);
+  useEffect(() => setPage(1), [pageSize, quickFilter]);
 
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * pageSize;
@@ -213,7 +224,7 @@ export function MetersView() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#0A4266] dark:text-[#6BB4E8]">All Meters</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Full smart meter inventory: STS type, connectivity, assigned tenant, and operational health.
+            STS meter fleet: readings, sync, link health, and where each device is installed (assignment is secondary).
           </p>
         </div>
         <Link
@@ -253,44 +264,47 @@ export function MetersView() {
 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Building2 className="size-4 shrink-0" />
-          <span>Buildings</span>
-          <span className="text-xs font-normal">(reflects active filters)</span>
+          <Radar className="size-4 shrink-0" />
+          <span>Fleet health</span>
+          <span className="text-xs font-normal">(uses search + filters below)</span>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => {
-              setBuildingCategory("all");
-              setPage(1);
-            }}
+            onClick={() => setQuickFilter("all")}
             className={cn(
               "rounded-full border px-3 py-2 text-sm font-medium transition-colors",
-              buildingCategory === "all"
+              quickFilter === "all"
                 ? "border-[#0A4266] bg-[#0A4266] text-white dark:border-[#6BB4E8] dark:bg-[#6BB4E8] dark:text-foreground"
                 : "border-border bg-muted/40 text-foreground hover:bg-muted dark:border-border/80"
             )}
           >
-            All buildings <span className="ml-1.5 tabular-nums opacity-80">({matchesFiltersAndSearch.length})</span>
+            All meters <span className="ml-1.5 tabular-nums opacity-80">({quickFilterCounts.all})</span>
           </button>
-          {buildingCategories.map(({ name, count }) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => {
-                setBuildingCategory(name);
-                setPage(1);
-              }}
-              className={cn(
-                "rounded-full border px-3 py-2 text-sm font-medium transition-colors",
-                buildingCategory === name
-                  ? "border-[#0A4266] bg-[#0A4266] text-white dark:border-[#6BB4E8] dark:bg-[#6BB4E8] dark:text-foreground"
-                  : "border-border bg-card text-foreground hover:bg-muted dark:border-border/80"
-              )}
-            >
-              {name} <span className="ml-1.5 tabular-nums opacity-80">({count})</span>
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => setQuickFilter("attention")}
+            className={cn(
+              "rounded-full border px-3 py-2 text-sm font-medium transition-colors",
+              quickFilter === "attention"
+                ? "border-[#0A4266] bg-[#0A4266] text-white dark:border-[#6BB4E8] dark:bg-[#6BB4E8] dark:text-foreground"
+                : "border-border bg-card text-foreground hover:bg-muted dark:border-border/80"
+            )}
+          >
+            Needs attention <span className="ml-1.5 tabular-nums opacity-80">({quickFilterCounts.attention})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickFilter("healthy")}
+            className={cn(
+              "rounded-full border px-3 py-2 text-sm font-medium transition-colors",
+              quickFilter === "healthy"
+                ? "border-[#0A4266] bg-[#0A4266] text-white dark:border-[#6BB4E8] dark:bg-[#6BB4E8] dark:text-foreground"
+                : "border-border bg-card text-foreground hover:bg-muted dark:border-border/80"
+            )}
+          >
+            Healthy <span className="ml-1.5 tabular-nums opacity-80">({quickFilterCounts.healthy})</span>
+          </button>
         </div>
       </div>
 
@@ -299,7 +313,7 @@ export function MetersView() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search meter ID, tenant, building, landlord..."
+            placeholder="Search meter ID, serial, type, site, tenant…"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -489,76 +503,45 @@ export function MetersView() {
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm dark:border-border/80">
         <div className="border-b border-border px-4 py-3 dark:border-border/80">
-          <p className="text-sm font-medium text-foreground">Meter inventory</p>
+          <p className="text-sm font-medium text-foreground">Meter fleet</p>
+          <p className="text-xs text-muted-foreground">Device identity and telemetry first; links to accounts and sites are shortcuts.</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-left text-sm">
+          <table className="w-full min-w-[1020px] text-left text-sm">
             <thead>
               <tr className="bg-[#0A4266] text-white dark:bg-[#0d4d73]">
-                <th className="px-4 py-3 font-semibold">Meter ID</th>
+                <th className="px-4 py-3 font-semibold">Meter</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Tenant / Unit</th>
-                <th className="px-4 py-3 font-semibold">Building</th>
-                <th className="px-4 py-3 font-semibold">Landlord</th>
+                <th className="px-4 py-3 font-semibold">Installed</th>
                 <th className="px-4 py-3 font-semibold">Reading</th>
                 <th className="px-4 py-3 font-semibold">Connectivity</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
+                <th className="px-4 py-3 font-semibold">Device status</th>
                 <th className="px-4 py-3 font-semibold">Alerts</th>
-                <th className="px-4 py-3 font-semibold">Actions</th>
+                <th className="px-4 py-3 font-semibold">Assignment</th>
+                <th className="px-4 py-3 font-semibold">Shortcuts</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                     No meters match your search or filters.
                   </td>
                 </tr>
               ) : (
                 pageRows.map((row) => (
                   <tr key={row.meterId} className="bg-card transition-colors hover:bg-muted/40">
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">{row.meterId}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{meterTypeLabel(row.modelType)}</div>
-                      <div className="text-xs text-muted-foreground">Installed: {row.installedOn}</div>
+                      <div className="font-mono text-xs font-semibold text-foreground">{row.meterId}</div>
+                      <div className="text-xs text-muted-foreground">{row.serialNumber}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      {row.tenantId && row.tenantName ? (
-                        <>
-                          <Link href={`/dashboard/tenants/${encodeURIComponent(row.tenantId)}`} className="font-medium text-foreground hover:text-[#0A4266] dark:hover:text-[#6BB4E8]">
-                            {row.tenantName}
-                          </Link>
-                          <div className="text-xs text-muted-foreground">{row.unitLabel}</div>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.buildingId && row.buildingName ? (
-                        <Link href={`/dashboard/buildings/${row.buildingId}`} className="inline-flex items-center gap-1 text-foreground hover:text-[#0A4266] dark:hover:text-[#6BB4E8]">
-                          <Building2 className="size-3.5 text-muted-foreground" />
-                          <span className="font-medium">{row.buildingName}</span>
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.landlordId && row.landlordCompany ? (
-                        <Link href={`/dashboard/landlords/${encodeURIComponent(row.landlordId)}`} className="inline-flex items-center gap-1 text-foreground hover:text-[#0A4266] dark:hover:text-[#6BB4E8]">
-                          <UserRound className="size-3.5 text-muted-foreground" />
-                          <span className="font-medium">{row.landlordCompany}</span>
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
+                    <td className="px-4 py-3 font-medium text-foreground">{meterTypeLabel(row.modelType)}</td>
+                    <td className="px-4 py-3 tabular-nums text-foreground">{row.installedOn}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">
-                        {row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m3`}
+                        {row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m³`}
                       </div>
-                      <div className="text-xs text-muted-foreground">Sync: {row.lastSyncAt}</div>
+                      <div className="text-xs text-muted-foreground">Last sync {row.lastSyncAt}</div>
                     </td>
                     <td className="px-4 py-3">{connectivityBadge(row.connectivity)}</td>
                     <td className="px-4 py-3">{meterStatusBadge(row.status)}</td>
@@ -572,20 +555,68 @@ export function MetersView() {
                         <span className="text-xs text-muted-foreground">0</span>
                       )}
                     </td>
+                    <td className="max-w-[220px] px-4 py-3">
+                      {row.tenantId && row.tenantName ? (
+                        <div className="space-y-1">
+                          <div className="truncate">
+                            <Link
+                              href={`/dashboard/tenants/${encodeURIComponent(row.tenantId)}`}
+                              className="font-medium text-foreground hover:text-[#0A4266] dark:hover:text-[#6BB4E8]"
+                            >
+                              {row.tenantName}
+                            </Link>
+                            {row.unitLabel ? (
+                              <span className="text-muted-foreground"> · {row.unitLabel}</span>
+                            ) : null}
+                          </div>
+                          {row.buildingId && row.buildingName ? (
+                            <div className="truncate text-xs">
+                              <Building2 className="mr-1 inline size-3 text-muted-foreground" />
+                              <Link
+                                href={`/dashboard/buildings/${row.buildingId}`}
+                                className="text-muted-foreground hover:text-[#0A4266] dark:hover:text-[#6BB4E8]"
+                              >
+                                {row.buildingName}
+                              </Link>
+                            </div>
+                          ) : null}
+                          {row.landlordId && row.landlordCompany ? (
+                            <div className="truncate text-xs text-muted-foreground">
+                              <UserRound className="mr-1 inline size-3 opacity-70" />
+                              <Link
+                                href={`/dashboard/landlords/${encodeURIComponent(row.landlordId)}`}
+                                className="hover:text-[#0A4266] dark:hover:text-[#6BB4E8]"
+                              >
+                                {row.landlordCompany}
+                              </Link>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Unassigned</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {row.tenantId ? (
+                          <Link
+                            href={`/dashboard/tenants/${encodeURIComponent(row.tenantId)}`}
+                            className="inline-flex h-7 items-center justify-center rounded-full border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-muted dark:border-border/80"
+                          >
+                            Tenant
+                          </Link>
+                        ) : null}
                         {row.buildingId ? (
                           <Link
                             href={`/dashboard/buildings/${row.buildingId}`}
-                            className="inline-flex h-7 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-muted dark:border-border/80"
+                            className="inline-flex h-7 items-center justify-center rounded-full border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-muted dark:border-border/80"
                           >
-                            View Building
+                            Site
                           </Link>
-                        ) : (
-                          <Button type="button" variant="outline" size="sm" className="h-7 rounded-full text-xs" disabled>
-                            Assign
-                          </Button>
-                        )}
+                        ) : null}
+                        {!row.tenantId && !row.buildingId ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

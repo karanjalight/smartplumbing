@@ -22,6 +22,10 @@ export type TenantRow = {
   lastTokenDate: string;
   lastTokenPreview: string;
   status: TenantStatus;
+  /** Landlord portal: links tenant to a building row id. */
+  buildingId?: string | null;
+  /** Landlord portal: links tenant to `HouseUnitRow.id` for that building. */
+  houseUnitId?: string | null;
 };
 
 /** Extra fields for tenant detail (property, billing, STS / LONGi context). */
@@ -258,6 +262,34 @@ export function getTenantById(id: string): TenantDetail | undefined {
   if (!base) return undefined;
   const extra = { ...DEFAULT_EXTRAS, ...TENANT_EXTRAS[id] };
   return { ...base, ...extra };
+}
+
+function syntheticTenantEmail(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  return `${slug || "tenant"}@tenant.smartone.demo`;
+}
+
+/**
+ * Full detail row for any `TenantRow` (mock seed or landlord-portfolio CRUD).
+ * Merges mock extras when the id exists in `MOCK_TENANTS`; otherwise fills demo defaults.
+ */
+export function resolveTenantDetailForRow(row: TenantRow): TenantDetail {
+  const fromMock = getTenantById(row.id);
+  if (fromMock) {
+    return { ...fromMock, ...row };
+  }
+  return {
+    ...row,
+    ...DEFAULT_EXTRAS,
+    email: syntheticTenantEmail(row.name),
+    addressLine: `${row.property} — ${row.unit}`,
+    accountOpened: "—",
+    leaseNotes:
+      "Tenant record from your landlord portal. Stored locally in this browser until APIs are connected.",
+  };
 }
 
 function hashSeed(id: string): number {

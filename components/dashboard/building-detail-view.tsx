@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Building2,
   Droplets,
+  Home,
   Layers,
   MapPin,
   UserRound,
@@ -11,6 +12,9 @@ import {
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { LandlordAddHouseModal } from "@/components/landlord/landlord-add-house-modal";
+import { LandlordCaretakerModal } from "@/components/landlord/landlord-caretaker-modal";
+import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,18 +22,58 @@ import {
   getBuildingListDisplay,
   getHousesForBuilding,
   rentSummary,
+  type BuildingListRow,
+  type HouseUnitRow,
 } from "@/lib/buildings-data";
+import {
+  getLandlordBuildingMerged,
+  getLandlordTenantsMerged,
+  getMergedHousesForBuildingWithTenantAssignments,
+} from "@/lib/landlord-portfolio-storage";
 import { cn } from "@/lib/utils";
 
-export function BuildingDetailView({ buildingId }: { buildingId: string }) {
-  const building = useMemo(() => getBuildingById(buildingId), [buildingId]);
+export type BuildingDetailViewProps = {
+  buildingId: string;
+  /** Landlord portal: resolve building from merged localStorage + mock seed. */
+  portal?: "admin" | "landlord";
+  landlordPortalId?: string;
+};
+
+export function BuildingDetailView({
+  buildingId,
+  portal = "admin",
+  landlordPortalId,
+}: BuildingDetailViewProps) {
+  const portfolio = useLandlordPortfolioStore();
+  const building = useMemo((): BuildingListRow | undefined => {
+    if (portal === "landlord" && landlordPortalId && portfolio) {
+      return getLandlordBuildingMerged(landlordPortalId, buildingId, portfolio);
+    }
+    return getBuildingById(buildingId);
+  }, [portal, landlordPortalId, buildingId, portfolio]);
+
   const [unitQuery, setUnitQuery] = useState("");
+  const [caretakerOpen, setCaretakerOpen] = useState(false);
+  const [addHouseOpen, setAddHouseOpen] = useState(false);
 
   const display = building ? getBuildingListDisplay(building) : undefined;
-  const houses = useMemo(
-    () => (building ? getHousesForBuilding(building) : []),
-    [building]
-  );
+
+  const landlordTenantsForHouses = useMemo(() => {
+    if (!portfolio || portal !== "landlord" || !landlordPortalId) return [];
+    return getLandlordTenantsMerged(landlordPortalId, portfolio);
+  }, [portfolio, portal, landlordPortalId]);
+
+  const houses = useMemo((): HouseUnitRow[] => {
+    if (!building) return [];
+    if (portal === "landlord" && portfolio && landlordPortalId) {
+      return getMergedHousesForBuildingWithTenantAssignments(
+        building,
+        portfolio,
+        landlordTenantsForHouses
+      );
+    }
+    return getHousesForBuilding(building);
+  }, [building, portal, portfolio, landlordPortalId, landlordTenantsForHouses]);
 
   const filteredHouses = useMemo(() => {
     const s = unitQuery.trim().toLowerCase();
@@ -38,15 +82,35 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
       (h) =>
         h.label.toLowerCase().includes(s) ||
         (h.tenantName && h.tenantName.toLowerCase().includes(s)) ||
-        (h.meterId && h.meterId.toLowerCase().includes(s))
+        (h.meterId && h.meterId.toLowerCase().includes(s)) ||
+        (h.description && h.description.toLowerCase().includes(s))
     );
   }, [houses, unitQuery]);
+
+  function unitRentDisplay(h: HouseUnitRow): string {
+    if (h.rentKes != null && h.rentKes > 0) {
+      return `${h.rentKes.toLocaleString("en-KE")} KES`;
+    }
+    if (building && building.rentModel === "per_unit") {
+      return `${building.rentKes.toLocaleString("en-KE")} KES`;
+    }
+    return "—";
+  }
+
+  if (portal === "landlord" && landlordPortalId && portfolio === null) {
+    return (
+      <div className="py-12 text-center text-sm text-muted-foreground">Loading building…</div>
+    );
+  }
+
+  const buildingsListHref =
+    portal === "landlord" ? "/landlords/dashboard/buildings" : "/dashboard/buildings";
 
   if (!building || !display) {
     return (
       <div className="space-y-6 pb-10">
         <Link
-          href="/dashboard/buildings"
+          href={buildingsListHref}
           className={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
             "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground"
@@ -58,7 +122,7 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
         <div className="rounded-xl border border-border bg-card p-10 text-center dark:border-border/80">
           <p className="text-muted-foreground">Building not found.</p>
           <Link
-            href="/dashboard/buildings"
+            href={buildingsListHref}
             className={cn(buttonVariants({ variant: "default" }), "mt-6 rounded-full")}
           >
             View all buildings
@@ -70,10 +134,13 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
 
   const occupied = houses.filter((h) => h.tenantId).length;
 
+  const tenantHrefBase =
+    portal === "landlord" ? "/landlords/dashboard/tenants" : "/dashboard/tenants";
+
   return (
     <div className="space-y-8 pb-10">
       <Link
-        href="/dashboard/buildings"
+        href={buildingsListHref}
         className={cn(
           buttonVariants({ variant: "ghost", size: "sm" }),
           "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground"
@@ -124,38 +191,72 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
                 Landlord
               </p>
               <p className="mt-1 font-semibold text-foreground">{display.landlordCompany}</p>
-              <Link
-                href={`/dashboard/landlords/${building.landlordId}`}
-                className="mt-2 inline-flex text-sm font-medium text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
-              >
-                Open landlord profile
-              </Link>
+              {portal === "admin" ? (
+                <Link
+                  href={`/dashboard/landlords/${building.landlordId}`}
+                  className="mt-2 inline-flex text-sm font-medium text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
+                >
+                  Open landlord profile
+                </Link>
+              ) : (
+                <Link
+                  href="/landlords/dashboard/settings"
+                  className="mt-2 inline-flex text-sm font-medium text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
+                >
+                  Account settings
+                </Link>
+              )}
             </div>
             <div className="border-t border-border pt-4 dark:border-border/80">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <UserRound className="size-3.5" />
-                Caretaker / manager
-              </p>
-              <p className="mt-1 font-medium text-foreground">{building.caretakerName}</p>
-              <p className="text-sm text-muted-foreground">{building.caretakerPhone}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <UserRound className="size-3.5" />
+                  Caretaker / manager
+                </p>
+                {portal === "landlord" && landlordPortalId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 shrink-0 rounded-full px-2.5 text-xs"
+                    onClick={() => setCaretakerOpen(true)}
+                  >
+                    Edit
+                  </Button>
+                )}
+              </div>
+              <p className="mt-1 font-medium text-foreground">{building.caretakerName || "—"}</p>
+              <p className="text-sm text-muted-foreground">{building.caretakerPhone || "—"}</p>
             </div>
           </div>
         </div>
       </header>
 
       <section className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
             <Layers className="size-5 text-[#0A4266] dark:text-[#6BB4E8]" />
             <h2 className="text-lg font-semibold text-foreground">Houses & units</h2>
           </div>
-          <Input
-            value={unitQuery}
-            onChange={(e) => setUnitQuery(e.target.value)}
-            placeholder="Filter by unit, tenant, or meter…"
-            className="h-10 max-w-md rounded-full"
-            aria-label="Filter units"
-          />
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            {portal === "landlord" && landlordPortalId && building && (
+              <Button
+                type="button"
+                className="rounded-full gap-2 bg-[#0A4266] text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
+                onClick={() => setAddHouseOpen(true)}
+              >
+                <Home className="size-4" />
+                Add house / unit
+              </Button>
+            )}
+            <Input
+              value={unitQuery}
+              onChange={(e) => setUnitQuery(e.target.value)}
+              placeholder="Filter by unit, tenant, or meter…"
+              className="h-10 min-w-0 flex-1 rounded-full sm:max-w-md"
+              aria-label="Filter units"
+            />
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border dark:border-border/80">
@@ -163,6 +264,9 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
             <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-border/80">
               <tr>
                 <th className="px-4 py-3">Unit</th>
+                {portal === "landlord" && (
+                  <th className="hidden px-4 py-3 sm:table-cell">Rent / mo</th>
+                )}
                 <th className="hidden px-4 py-3 md:table-cell">Tenant</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Meter (STS)</th>
                 <th className="px-4 py-3">Notes</th>
@@ -175,10 +279,19 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
                   className="bg-card transition-colors hover:bg-muted/30 dark:hover:bg-muted/15"
                 >
                   <td className="px-4 py-3 font-medium text-foreground">{h.label}</td>
+                  {portal === "landlord" && (
+                    <td className="hidden px-4 py-3 tabular-nums text-foreground sm:table-cell">
+                      {unitRentDisplay(h)}
+                    </td>
+                  )}
                   <td className="hidden px-4 py-3 md:table-cell">
                     {h.tenantId && h.tenantName ? (
                       <Link
-                        href={`/dashboard/tenants/${h.tenantId}`}
+                        href={
+                          portal === "landlord"
+                            ? `${tenantHrefBase}?highlight=${encodeURIComponent(h.tenantId)}`
+                            : `${tenantHrefBase}/${encodeURIComponent(h.tenantId)}`
+                        }
                         className="font-medium text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
                       >
                         {h.tenantName}
@@ -212,6 +325,23 @@ export function BuildingDetailView({ buildingId }: { buildingId: string }) {
           </p>
         )}
       </section>
+
+      {portal === "landlord" && landlordPortalId && building && (
+        <>
+          <LandlordCaretakerModal
+            open={caretakerOpen}
+            onClose={() => setCaretakerOpen(false)}
+            building={building}
+            landlordId={landlordPortalId}
+          />
+          <LandlordAddHouseModal
+            open={addHouseOpen}
+            onClose={() => setAddHouseOpen(false)}
+            building={building}
+            landlordId={landlordPortalId}
+          />
+        </>
+      )}
     </div>
   );
 }

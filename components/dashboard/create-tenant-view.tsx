@@ -189,16 +189,17 @@ export function CreateTenantView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="meterId" className="text-foreground">
-                  Meter ID (STS)
-                  <RequiredMark />
+                  Water meter (optional)
                 </Label>
                 <Input
                   id="meterId"
                   name="meterId"
-                  required
                   placeholder="e.g. 0159000000640"
                   className="h-11 rounded-lg font-mono text-sm"
                 />
+                <FieldDescription>
+                  You can assign a smart water meter now or add it later from meter management.
+                </FieldDescription>
               </div>
             </div>
 

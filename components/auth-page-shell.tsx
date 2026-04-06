@@ -4,7 +4,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const AUTH_HERO_IMAGE =
-  "https://images.pexels.com/photos/2837863/pexels-photo-2837863.jpeg";
+  "https://images.pexels.com/photos/34254270/pexels-photo-34254270.jpeg";
 
 export function AuthPageShell({ children }: { children: React.ReactNode }) {
   return (

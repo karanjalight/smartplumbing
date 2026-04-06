@@ -27,12 +27,14 @@ export type HouseUnitRow = {
   buildingId: string;
   label: string;
   description: string | null;
+  /** Per-unit monthly rent (KES) when set; otherwise UI falls back to building default. */
+  rentKes?: number | null;
   meterId: string | null;
   tenantId: string | null;
   tenantName: string | null;
 };
 
-const MOCK_BUILDINGS: BuildingListRow[] = [
+export const MOCK_BUILDINGS: BuildingListRow[] = [
   {
     id: "BLD-001",
     name: "Sunrise Apartments",

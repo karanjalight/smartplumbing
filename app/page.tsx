@@ -1,4 +1,4 @@
-import { AuthPageShell } from "@/components/auth-page-shell";
+import { AuthPageShell } from "@/components/admin-page-shell";
 import { SignInForm } from "@/components/sign-in-form";
 
 export default function Home() {

@@ -492,7 +492,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
             </h2>
             <div className="mt-4 flex flex-col gap-2">
               <Link
-                href={`/dashboard/tokens?meter=${encodeURIComponent(tenant.meterId)}`}
+                href={`/dashboard/tokens/manual?meter=${encodeURIComponent(tenant.meterId)}`}
                 className={cn(
                   buttonVariants({ variant: "default", size: "default" }),
                   "h-9 w-full rounded-full bg-[#0A4266] text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"

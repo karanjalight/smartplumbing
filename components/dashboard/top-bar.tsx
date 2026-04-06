@@ -1,36 +1,206 @@
 "use client";
 
+import { Menu } from "@base-ui/react/menu";
+import { Popover } from "@base-ui/react/popover";
 import {
+  AlertTriangle,
   Bell,
+  Building2,
   ChevronDown,
+  CreditCard,
+  Gauge,
   Globe,
+  Info,
+  LayoutGrid,
+  LogOut,
+  Menu as MenuIcon,
+  MessageSquare,
   Moon,
-  Search,
+  Settings,
   ShoppingCart,
   Sun,
+  Ticket,
   User,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/theme-provider";
 import { useEffect, useState } from "react";
 
+import { TopBarSearch } from "@/components/dashboard/top-bar-search";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { LANDLORD_SEARCH_PAGES } from "@/lib/landlord-search-pages";
 import { cn } from "@/lib/utils";
 
-export function TopBar() {
+export type TopBarProps = {
+  onMenuClick?: () => void;
+  /** Admin operations dashboard vs landlord property portal. */
+  portal?: "admin" | "landlord";
+};
+
+const ADMIN_ACCOUNT = {
+  name: "Tracy Miller",
+  email: "tracy.miller@smartplumbing.co.ke",
+};
+
+const LANDLORD_ACCOUNT = {
+  name: "James Mwangi",
+  email: "j.mwangi@property.co.ke",
+};
+
+type NotificationKind =
+  | "payment"
+  | "meter"
+  | "token"
+  | "building"
+  | "alert"
+  | "message"
+  | "system";
+
+type NotificationItem = {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  description: string;
+  time: string;
+  unread?: boolean;
+};
+
+const NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: "1",
+    kind: "payment",
+    title: "M-Pesa payment received",
+    description: "KES 2,400 from Unit 4B — reference PLB9X2",
+    time: "2 min ago",
+    unread: true,
+  },
+  {
+    id: "2",
+    kind: "meter",
+    title: "Meter offline",
+    description: "Building Oak Residency — meter SM-2041 stopped reporting",
+    time: "18 min ago",
+    unread: true,
+  },
+  {
+    id: "3",
+    kind: "token",
+    title: "Low token balance",
+    description: "Tenant James K. has under 5 kWh remaining",
+    time: "1 hr ago",
+    unread: true,
+  },
+  {
+    id: "4",
+    kind: "building",
+    title: "New unit onboarded",
+    description: "Sunset Apartments — 6 meters linked successfully",
+    time: "3 hr ago",
+  },
+  {
+    id: "5",
+    kind: "alert",
+    title: "Valve check required",
+    description: "Scheduled maintenance window opens tomorrow 06:00",
+    time: "Yesterday",
+  },
+  {
+    id: "6",
+    kind: "message",
+    title: "Landlord message",
+    description: "Sarah W. asked about last month’s statement",
+    time: "Yesterday",
+  },
+  {
+    id: "7",
+    kind: "system",
+    title: "System update",
+    description: "Dashboard analytics refreshed — new payout filters available",
+    time: "2 days ago",
+  },
+];
+
+const notificationIconConfig: Record<
+  NotificationKind,
+  { icon: typeof CreditCard; className: string }
+> = {
+  payment: {
+    icon: CreditCard,
+    className:
+      "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  },
+  meter: {
+    icon: Gauge,
+    className: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
+  },
+  token: {
+    icon: Ticket,
+    className:
+      "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+  },
+  building: {
+    icon: Building2,
+    className:
+      "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+  },
+  alert: {
+    icon: AlertTriangle,
+    className:
+      "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+  },
+  message: {
+    icon: MessageSquare,
+    className:
+      "bg-[#0A4266]/15 text-[#0A4266] dark:bg-[#6BB4E8]/20 dark:text-[#6BB4E8]",
+  },
+  system: {
+    icon: Info,
+    className: "bg-muted text-muted-foreground",
+  },
+};
+
+const menuPanelClass =
+  "min-w-[14rem] overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-lg outline-none";
+
+const menuItemClass = (state: { disabled: boolean; highlighted: boolean }) =>
+  cn(
+    "flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm outline-none select-none",
+    state.disabled && "pointer-events-none opacity-50",
+    state.highlighted && "bg-muted text-foreground"
+  );
+
+export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
+  const router = useRouter();
+  const isLandlord = portal === "landlord";
+  const ACCOUNT = isLandlord ? LANDLORD_ACCOUNT : ADMIN_ACCOUNT;
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const isDark = resolvedTheme === "dark";
 
   useEffect(() => setMounted(true), []);
 
+  const unreadCount = NOTIFICATIONS.filter((n) => n.unread).length;
+
   return (
     <header
-      className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background px-4 py-3 lg:px-6"
+      className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3 lg:gap-4 lg:px-6"
       role="banner"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-6">
-        <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4 lg:gap-6">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0 touch-manipulation rounded-full md:hidden"
+          onClick={onMenuClick}
+          aria-label="Open navigation menu"
+        >
+          <MenuIcon className="size-6" aria-hidden />
+        </Button>
+
+        <div className="hidden lg:flex min-w-0 items-center gap-1.5 sm:gap-2">
           <label htmlFor="user-role" className="sr-only">
             User role
           </label>
@@ -40,55 +210,46 @@ export function TopBar() {
           <button
             id="user-role"
             type="button"
-            className="flex items-center gap-2 rounded-full border border-input bg-background px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 dark:focus-visible:ring-[#6BB4E8]"
+            className="flex max-w-[min(100%,11rem)] items-center gap-1.5 rounded-full border border-input bg-background px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 dark:focus-visible:ring-[#6BB4E8] sm:max-w-none sm:gap-2 sm:px-3"
             aria-haspopup="listbox"
             aria-expanded={false}
-            aria-label="User role: Client"
+            aria-label={
+              isLandlord ? "User role: Landlord" : "User role: Client"
+            }
           >
-            <span className="flex size-7 items-center justify-center rounded-full bg-[#0A4266]/10 dark:bg-[#6BB4E8]/20">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#0A4266]/10 dark:bg-[#6BB4E8]/20">
               <User className="size-4 text-[#0A4266] dark:text-[#6BB4E8]" aria-hidden />
             </span>
-            <span>Client</span>
-            <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
+            <span className="truncate">
+              {isLandlord ? "Landlord" : "Client"}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           </button>
         </div>
 
-        <div className="relative hidden flex-1 max-w-md lg:block">
-          <label htmlFor="search" className="sr-only">
-            Search
-          </label>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input
-            id="search"
-            type="search"
-            placeholder="Search"
-            autoComplete="off"
-            className="h-10 rounded-full border-input pl-9 pr-16"
-            aria-label="Search"
-          />
-          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-input bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            <span className="sr-only">Press </span>⌘K
-          </kbd>
-        </div>
+        <TopBarSearch
+          pages={isLandlord ? LANDLORD_SEARCH_PAGES : undefined}
+          hrefDisplayStrip={isLandlord ? "/landlords/dashboard" : "/dashboard"}
+        />
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:gap-3">
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-input bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2"
+          className="hidden lg:flex items-center gap-1.5 rounded-full border border-input bg-background px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 sm:gap-2 sm:px-3"
           aria-label="Language: English"
           aria-haspopup="listbox"
         >
-          <Globe className="size-4" aria-hidden />
+          <Globe className="size-4 shrink-0" aria-hidden />
           <span className="hidden sm:inline">English</span>
-          <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
 
-        <div className="h-6 w-px bg-border" aria-hidden />
+        <div className="hidden h-6 w-px lg:block bg-border" aria-hidden />
 
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-input bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2"
+          className="hidden lg:flex items-center gap-1.5 rounded-full border border-input bg-background px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 sm:gap-2 sm:px-3"
           aria-label="Currency: KES"
           aria-haspopup="listbox"
         >
@@ -96,7 +257,7 @@ export function TopBar() {
             $
           </span>
           <span className="hidden sm:inline">KES</span>
-          <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
 
         {mounted && (
@@ -119,7 +280,10 @@ export function TopBar() {
 
         <button
           type="button"
-          className="relative flex size-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2"
+          className={cn(
+            "relative hidden lg:flex size-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2",
+            isLandlord && "lg:hidden"
+          )}
           aria-label="Shopping cart, 4 items"
         >
           <ShoppingCart className="size-5" aria-hidden />
@@ -128,28 +292,189 @@ export function TopBar() {
           </span>
         </button>
 
-        <button
-          type="button"
-          className="flex size-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2"
-          aria-label="Notifications"
+        <Popover.Root
+          modal={false}
+          open={notificationsOpen}
+          onOpenChange={setNotificationsOpen}
         >
-          <Bell className="size-5" aria-hidden />
-        </button>
+          <Popover.Trigger
+            className={cn(
+              "relative flex size-10 items-center justify-center rounded-full text-foreground transition-colors",
+              "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 dark:focus-visible:ring-[#6BB4E8]"
+            )}
+            aria-label={
+              unreadCount > 0
+                ? `Notifications, ${unreadCount} unread`
+                : "Notifications"
+            }
+          >
+            <Bell className="size-5" aria-hidden />
+            {unreadCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex min-w-5 justify-center rounded-full bg-[#0A4266] px-1 text-[10px] font-bold leading-5 text-white dark:bg-[#6BB4E8] dark:text-foreground">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Positioner side="bottom" align="end" sideOffset={8}>
+              <Popover.Popup className="w-[min(calc(100vw-1.5rem),22rem)] rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg outline-none">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+                  <div>
+                    <Popover.Title className="text-sm font-semibold text-foreground">
+                      Notifications
+                    </Popover.Title>
+                    <Popover.Description className="sr-only">
+                      Recent alerts and updates for your account
+                    </Popover.Description>
+                  </div>
+                  {unreadCount > 0 && (
+                    <span className="rounded-full bg-[#0A4266]/10 px-2 py-0.5 text-[11px] font-medium text-[#0A4266] dark:bg-[#6BB4E8]/20 dark:text-[#6BB4E8]">
+                      {unreadCount} new
+                    </span>
+                  )}
+                </div>
+                <div className="max-h-[min(24rem,50vh)] overflow-y-auto overscroll-contain p-1">
+                  <ul className="flex flex-col gap-0.5">
+                    {NOTIFICATIONS.map((item) => {
+                      const cfg = notificationIconConfig[item.kind];
+                      const Icon = cfg.icon;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              "flex w-full gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/80",
+                              item.unread &&
+                                "bg-[#0A4266]/[0.06] dark:bg-[#6BB4E8]/[0.08]"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "flex size-10 shrink-0 items-center justify-center rounded-xl",
+                                cfg.className
+                              )}
+                              aria-hidden
+                            >
+                              <Icon className="size-5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-start justify-between gap-2">
+                                <span className="text-sm font-medium text-foreground">
+                                  {item.title}
+                                </span>
+                                {item.unread && (
+                                  <span className="mt-1 size-2 shrink-0 rounded-full bg-[#0A4266] dark:bg-[#6BB4E8]" />
+                                )}
+                              </span>
+                              <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                {item.description}
+                              </span>
+                              <span className="mt-1 text-[11px] text-muted-foreground/90">
+                                {item.time}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+                <div className="border-t border-border p-2">
+                  <Popover.Close
+                    render={
+                      <Link
+                        href={
+                          isLandlord
+                            ? "/landlords/dashboard/alerts"
+                            : "/dashboard/notifications"
+                        }
+                        className="flex w-full items-center justify-center rounded-xl py-2 text-center text-sm font-medium text-[#0A4266] transition-colors hover:bg-muted dark:text-[#6BB4E8]"
+                      />
+                    }
+                  >
+                    View all notifications
+                  </Popover.Close>
+                </div>
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
 
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-full pl-1 pr-3 py-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2"
-          aria-label="Profile menu for Tracy Miller"
-          aria-haspopup="menu"
-        >
-          <div className="flex size-9 items-center justify-center rounded-full bg-muted text-foreground">
-            <User className="size-5" aria-hidden />
-          </div>
-          <span className="hidden max-w-32 truncate text-sm font-semibold text-foreground sm:inline">
-            Tracy Miller
-          </span>
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
+        <Menu.Root modal={false}>
+          <Menu.Trigger
+            className={cn(
+              "flex items-center gap-2 rounded-full py-1.5 pl-1 pr-2 text-foreground transition-colors sm:pr-3",
+              "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 dark:focus-visible:ring-[#6BB4E8]",
+              "data-[popup-open]:bg-muted"
+            )}
+            aria-label={`Account menu for ${ACCOUNT.name}`}
+          >
+            <div className="flex size-9 items-center justify-center rounded-full bg-muted text-foreground">
+              <User className="size-5" aria-hidden />
+            </div>
+            <span className="hidden max-w-32 truncate text-sm font-semibold text-foreground sm:inline">
+              {ACCOUNT.name}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Positioner side="bottom" align="end" sideOffset={8}>
+              <Menu.Popup className={menuPanelClass}>
+                <div className="border-b border-border px-3 py-3">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {ACCOUNT.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {ACCOUNT.email}
+                  </p>
+                </div>
+                <div className="p-1.5">
+                  <Menu.Item
+                    className={menuItemClass}
+                    onClick={() =>
+                      router.push(
+                        isLandlord ? "/landlords/dashboard" : "/dashboard"
+                      )
+                    }
+                  >
+                    <LayoutGrid className="size-4 text-muted-foreground" aria-hidden />
+                    Dashboard
+                  </Menu.Item>
+                  <Menu.Item
+                    className={menuItemClass}
+                    onClick={() =>
+                      router.push(
+                        isLandlord
+                          ? "/landlords/dashboard/settings"
+                          : "/dashboard/settings"
+                      )
+                    }
+                  >
+                    <Settings className="size-4 text-muted-foreground" aria-hidden />
+                    Settings
+                  </Menu.Item>
+                </div>
+                <Menu.Separator className="mx-1 my-0 h-px bg-border" />
+                <div className="p-1.5">
+                  <Menu.Item
+                    className={(state) =>
+                      cn(
+                        menuItemClass(state),
+                        "text-destructive focus:text-destructive data-[highlighted]:bg-destructive/10"
+                      )
+                    }
+                    onClick={() =>
+                      router.push(isLandlord ? "/landlords/login" : "/")
+                    }
+                  >
+                    <LogOut className="size-4 opacity-80" aria-hidden />
+                    Sign out
+                  </Menu.Item>
+                </div>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
     </header>
   );

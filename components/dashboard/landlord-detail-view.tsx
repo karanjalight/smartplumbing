@@ -616,7 +616,7 @@ export function LandlordDetailView({ landlord }: { landlord: LandlordRow }) {
                 Payouts
               </Link>
               <Link
-                href="/dashboard/tokens"
+                href="/dashboard/tokens/manual"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "default" }),
                   "h-9 w-full rounded-full"

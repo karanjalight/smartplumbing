@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   CreditCard,
   Droplets,
+  FileBarChart,
   Gauge,
   HelpCircle,
   Home,
@@ -19,12 +20,14 @@ import {
   Settings,
   SlidersHorizontal,
   Ticket,
+  UserCog,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -52,6 +55,7 @@ const menuGroups: MenuGroup[] = [
       { href: "/dashboard/tenants", label: "Tenants", icon: Users },
       { href: "/dashboard/landlords", label: "Landlords", icon: Building2 },
       { href: "/dashboard/buildings", label: "Buildings", icon: Layers },
+      { href: "/dashboard/staff", label: "Staff", icon: UserCog },
     ],
   },
   {
@@ -61,35 +65,46 @@ const menuGroups: MenuGroup[] = [
     items: [
       { href: "/dashboard/meters", label: "All Meters", icon: Gauge },
       { href: "/dashboard/meters/onboard", label: "Onboard Meter", icon: PlusCircle },
-      { href: "/dashboard/meter-health", label: "Meter Health", icon: Activity },
-      { href: "/dashboard/valve-control", label: "Valve Control", icon: SlidersHorizontal },
+        // { href: "/dashboard/meter-health", label: "Meter Health", icon: Activity },
+        // { href: "/dashboard/valve-control", label: "Valve Control", icon: SlidersHorizontal },
     ],
   },
   {
     id: "billing",
-    title: "Billing & Tokens",
-    icon: Wallet,
+    title: "Tokens",
+    icon: Ticket,
     items: [
-      { href: "/dashboard/tokens", label: "Manual Tokens", icon: Ticket },
+      { href: "/dashboard/tokens", label: "Tokens", icon: Ticket },
+      { href: "/dashboard/tokens/manual", label: "Manual Tokens", icon: PlusCircle },
+        // { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+        // { href: "/dashboard/payouts", label: "Payouts", icon: Wallet },
+    ],
+  },
+  {
+    id: "Payments",
+    title: "Payments",
+    icon: CreditCard,
+    items: [
       { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
       { href: "/dashboard/payouts", label: "Payouts", icon: Wallet },
     ],
   },
-  {
-    id: "communications",
-    title: "Communications",
-    icon: Bell,
-    items: [
-      { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
-    ],
-  },
+  // {
+  //   id: "communications",
+  //   title: "Communications",
+  //   icon: Bell,
+  //   items: [
+  //     { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  //   ],
+  // },
   {
     id: "reports",
     title: "Reports & Audit",
     icon: BarChart3,
     items: [
+      { href: "/dashboard/reports", label: "Reports", icon: FileBarChart },
       { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/dashboard/activity-logs", label: "Activity Logs", icon: ScrollText },
+      // { href: "/dashboard/activity-logs", label: "Activity Logs", icon: ScrollText },
     ],
   },
   {
@@ -109,13 +124,21 @@ function isNavItemActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") {
     return pathname === "/dashboard" || pathname === "/dashboard/";
   }
+  if (href === "/dashboard/tokens") {
+    return pathname === "/dashboard/tokens" || pathname === "/dashboard/tokens/";
+  }
+  if (href === "/dashboard/reports") {
+    return pathname === "/dashboard/reports" || pathname === "/dashboard/reports/";
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function CollapsedNav({
   items,
+  onNavigate,
 }: {
   items: { href: string; label: string; icon: React.ElementType }[];
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   return (
@@ -146,10 +169,12 @@ function NavGroup({
   group,
   isExpanded,
   onToggle,
+  onNavigate,
 }: {
   group: MenuGroup;
   isExpanded: boolean;
   onToggle: () => void;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const TitleIcon = group.icon;
@@ -189,6 +214,7 @@ function NavGroup({
             <li key={href} className="pl-8">
               <Link
                 href={href}
+                onClick={onNavigate}
                 className={cn(
                   "flex items-center gap-3 rounded-full px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive
@@ -215,9 +241,37 @@ function getActiveGroupId(pathname: string): string {
   return group?.id ?? "main";
 }
 
-export function Sidebar() {
+function subscribeMdUp(callback: () => void) {
+  const mq = window.matchMedia("(min-width: 768px)");
+  mq.addEventListener("change", callback);
+  return () => mq.removeEventListener("change", callback);
+}
+
+function getMdUpSnapshot() {
+  return window.matchMedia("(min-width: 768px)").matches;
+}
+
+function getMdUpServerSnapshot() {
+  return true;
+}
+
+export type SidebarProps = {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+};
+
+export function Sidebar({
+  mobileOpen = false,
+  onMobileClose,
+}: SidebarProps = {}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const isMdUp = useSyncExternalStore(
+    subscribeMdUp,
+    getMdUpSnapshot,
+    getMdUpServerSnapshot
+  );
+  const showCollapsedNav = collapsed && isMdUp;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
     const activeId = getActiveGroupId(pathname);
     return new Set([activeId]);
@@ -240,42 +294,60 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200",
-        collapsed ? "w-[72px]" : "w-64"
+        "flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-[width,transform] duration-200 ease-out",
+        "fixed left-0 top-0 z-50 h-full max-h-screen shadow-lg md:relative md:z-0 md:max-h-none md:shadow-none",
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        !mobileOpen && "max-md:pointer-events-none",
+        collapsed ? "w-64 md:w-[72px]" : "w-64"
       )}
       aria-label="Main navigation"
     >
       <div className="flex min-h-16 items-center justify-between gap-2 border-b border-sidebar-border px-3">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 overflow-hidden text-foreground no-underline"
+          onClick={() => onMobileClose?.()}
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-foreground no-underline"
           aria-label="Smart Plumbing - Go to dashboard"
         >
           <Droplets className="size-8 shrink-0 text-[#0A4266] dark:text-[#6BB4E8]" aria-hidden />
-          {!collapsed && (
+          {(!collapsed || !isMdUp) && (
             <span className="truncate text-lg font-bold tracking-tight">
               Smart Plumbing
             </span>
           )}
         </Link>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="shrink-0 rounded-full"
-          onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-        >
-          <ChevronLeft
-            className={cn("size-5 transition-transform", collapsed && "rotate-180")}
-            aria-hidden
-          />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {onMobileClose && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded-full md:hidden"
+              onClick={onMobileClose}
+              aria-label="Close menu"
+            >
+              <X className="size-5" aria-hidden />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="hidden shrink-0 rounded-full md:inline-flex"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+          >
+            <ChevronLeft
+              className={cn("size-5 transition-transform", collapsed && "rotate-180")}
+              aria-hidden
+            />
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
-        {!collapsed && (
+        {!showCollapsedNav && (
           <div className="flex flex-col gap-1">
             {menuGroups.map((group) => (
               <NavGroup
@@ -283,14 +355,17 @@ export function Sidebar() {
                 group={group}
                 isExpanded={expandedGroups.has(group.id)}
                 onToggle={() => toggleGroup(group.id)}
+                onNavigate={() => onMobileClose?.()}
               />
             ))}
           </div>
         )}
-        {collapsed && <CollapsedNav items={allMenuItems} />}
+        {showCollapsedNav && (
+          <CollapsedNav items={allMenuItems} onNavigate={() => onMobileClose?.()} />
+        )}
       </div>
 
-      {!collapsed && (
+      {(!collapsed || !isMdUp) && (
         <div className="border-t border-sidebar-border p-3">
           <div
             className="rounded-xl bg-muted/80 px-4 py-4 dark:bg-muted/50"
@@ -307,6 +382,7 @@ export function Sidebar() {
                 </p>
                 <Link
                   href="/dashboard/help"
+                  onClick={() => onMobileClose?.()}
                   className="mt-2 inline-flex items-center rounded-full border-2 border-[#0A4266] bg-background px-3 py-1.5 text-sm font-medium text-[#0A4266] transition-colors hover:bg-[#0A4266] hover:text-white dark:border-[#6BB4E8] dark:text-[#6BB4E8] dark:hover:bg-[#6BB4E8] dark:hover:text-foreground"
                 >
                   Go To Help Centre
