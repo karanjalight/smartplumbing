@@ -107,14 +107,6 @@ export function AnalyticsView() {
     setIsMounted(true);
   }, []);
 
-  if (!isMounted) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-        Loading analytics...
-      </div>
-    );
-  }
-
   const tokenRows = useMemo(() => mergeTokenLedger(), [pathname]);
   const completedPayments = useMemo(() => getCompletedPayments(), []);
 
@@ -146,6 +138,14 @@ export function AnalyticsView() {
     () => categorySplit.filter((c) => c.amountKes > 0).map((c) => ({ name: c.label, value: c.amountKes, fill: c.fill })),
     [categorySplit]
   );
+
+  if (!isMounted) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+        Loading analytics...
+      </div>
+    );
+  }
 
   function exportCsv() {
     const header = [

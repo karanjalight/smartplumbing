@@ -74,16 +74,16 @@ export function LandlordReportsView({ landlordId }: { landlordId: string }) {
     setIsMounted(true);
   }, []);
 
-  if (!isMounted) {
-    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading reports…</div>;
-  }
-
   const bundle = useMemo(() => {
     if (!portfolio || !finance) return null;
     return buildLandlordReportsBundle(landlordId, portfolio, finance, period);
   }, [landlordId, portfolio, finance, period]);
 
   const manualTokenCount = useMemo(() => readStoredManualPurchases().length, []);
+
+  if (!isMounted) {
+    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading reports...</div>;
+  }
 
   function exportSnapshotJson() {
     if (!bundle || !portfolio || !finance) return;

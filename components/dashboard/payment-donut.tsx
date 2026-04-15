@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Cell,
   Legend,
@@ -16,6 +17,16 @@ const DATA = [
 ];
 
 export function PaymentDonut() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <div className="h-[200px] min-h-[200px] w-full min-w-0 rounded-md bg-muted/30" aria-hidden />;
+  }
+
   return (
     <div
       className="h-[200px] min-h-[200px] w-full min-w-0"

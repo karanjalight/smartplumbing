@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -29,6 +30,16 @@ function kesTick(n: number) {
 }
 
 export function LandlordRevenueLineChart() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <div className="h-[260px] min-h-[260px] w-full min-w-0 rounded-md bg-muted/30" aria-hidden />;
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm dark:border-border/80 sm:p-5">
       <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">

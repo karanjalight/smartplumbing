@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -26,6 +27,16 @@ const DATA = [
 ];
 
 export function RevenueChart() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <div className="h-[280px] min-h-[280px] w-full min-w-0 rounded-md bg-muted/30" aria-hidden />;
+  }
+
   return (
     <div
       className="h-[280px] min-h-[280px] w-full min-w-0"

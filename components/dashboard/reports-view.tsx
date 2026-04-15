@@ -85,10 +85,6 @@ export function ReportsView() {
     setIsMounted(true);
   }, []);
 
-  if (!isMounted) {
-    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading reports…</div>;
-  }
-
   const tokenRows = useMemo(() => mergeTokenLedger(), []);
   const tokenReport = useMemo(() => aggregateTokenPurchases(tokenRows), [tokenRows]);
   const revenue = useMemo(() => getRevenueReport(), []);
@@ -127,6 +123,10 @@ export function ReportsView() {
   const methodChartData = revenue.byMethod.map((m) => ({ name: m.label, value: m.amountKes }));
   const railChartData = payout.netByRail.filter((r) => r.netKes > 0).map((r) => ({ name: r.label, value: r.netKes }));
   const tokenSourceData = tokenReport.bySource.filter((s) => s.volumeKes > 0 || s.count > 0);
+
+  if (!isMounted) {
+    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading reports...</div>;
+  }
 
   return (
     <div className="space-y-8 pb-12">
