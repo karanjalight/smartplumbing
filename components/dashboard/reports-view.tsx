@@ -15,7 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -79,6 +79,15 @@ function kesTooltipValue(v: unknown) {
 
 export function ReportsView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading reports…</div>;
+  }
 
   const tokenRows = useMemo(() => mergeTokenLedger(), []);
   const tokenReport = useMemo(() => aggregateTokenPurchases(tokenRows), [tokenRows]);

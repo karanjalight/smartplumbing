@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -101,6 +101,19 @@ export function AnalyticsView() {
   const stackId = useId();
 
   const [period, setPeriod] = useState<AnalyticsPeriod>("30d");
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+        Loading analytics...
+      </div>
+    );
+  }
 
   const tokenRows = useMemo(() => mergeTokenLedger(), [pathname]);
   const completedPayments = useMemo(() => getCompletedPayments(), []);

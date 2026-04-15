@@ -14,7 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -68,6 +68,15 @@ export function LandlordReportsView({ landlordId }: { landlordId: string }) {
   const finance = useLandlordFinanceStore();
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const [period, setPeriod] = useState<LandlordReportPeriod>("30d");
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading reports…</div>;
+  }
 
   const bundle = useMemo(() => {
     if (!portfolio || !finance) return null;
