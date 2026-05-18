@@ -15,7 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import {
   Bar,
   BarChart,
@@ -45,6 +45,7 @@ import { getBasePurchasedTokenRows, readStoredManualPurchases, type TokenPurchas
 import { cn } from "@/lib/utils";
 
 const DEMO_AS_OF = "Apr 2026 (demo data)";
+const subscribe = () => () => {};
 
 const TABS = [
   { id: "overview" as const, label: "Overview", Icon: LayoutDashboard, description: "KPIs across billing, payouts, and fleet" },
@@ -79,11 +80,7 @@ function kesTooltipValue(v: unknown) {
 
 export function ReportsView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   const tokenRows = useMemo(() => mergeTokenLedger(), []);
   const tokenReport = useMemo(() => aggregateTokenPurchases(tokenRows), [tokenRows]);

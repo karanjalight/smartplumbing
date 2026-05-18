@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { z } from "zod";
 
 import { AuthPrimaryButton } from "@/components/auth-primary-button";
@@ -22,6 +23,10 @@ import {
   authInputClassName,
   authLinkClassName,
 } from "@/lib/auth-ui";
+import { dashboardPathForRole } from "@/lib/auth/routes";
+import { getPublicSupabaseConfig } from "@/lib/supabase/env";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { UserRole } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
 
 const signInSchema = z.object({
@@ -34,15 +39,80 @@ export type SignInFormValues = z.infer<typeof signInSchema>;
 export function SignInForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  /** Errors that are not tied to a single field (config, profile fetch). */
+  const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<SignInFormValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: {
-      email: "karanjslight@gmail.com",
+      email: "",
       password: "",
     },
     mode: "onBlur",
   });
+
+  const supabaseReady = Boolean(getPublicSupabaseConfig());
+
+  async function onSubmit(values: SignInFormValues) {
+    form.clearErrors();
+    setFormError(null);
+
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setFormError(
+        "Sign-in is not available yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see docs/SUPABASE.md)."
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      });
+
+      if (error) {
+        form.setError("password", {
+          type: "server",
+          message: error.message,
+        });
+        return;
+      }
+
+      const user = data.user;
+      if (!user) {
+        form.setError("password", {
+          type: "server",
+          message: "No user was returned from sign-in. Try again.",
+        });
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        setFormError(
+          profileError.message || "Could not load your profile. Try again."
+        );
+        return;
+      }
+
+      const role = (profile?.role ?? "tenant") as UserRole;
+      const next = dashboardPathForRole(role);
+
+      toast.success("Signed in");
+      router.refresh();
+      router.push(next);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-md">
@@ -60,19 +130,26 @@ export function SignInForm() {
         id="sign-in-heading"
         className="mt-2 text-3xl font-semibold tracking-tight text-foreground"
       >
-        Sign in 
+        Sign in
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Access your meters, invoices, and customer records in one place.
       </p>
 
+      {!supabaseReady && (
+        <p
+          className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          Supabase is not configured in this environment. Add the public URL and
+          anon key to <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-900/80">.env.local</code> to enable sign-in.
+        </p>
+      )}
+
       <form
         className="mt-10 space-y-6"
         aria-labelledby="sign-in-heading"
-        onSubmit={form.handleSubmit(() => {
-          // Wire up sign-in API (e.g. server action or fetch) here.
-          router.push("/dashboard");
-        })}
+        onSubmit={form.handleSubmit(onSubmit)}
         noValidate
       >
         <FieldGroup className="gap-6">
@@ -88,7 +165,13 @@ export function SignInForm() {
               aria-invalid={!!form.formState.errors.email}
               aria-required
               className={cn(authInputClassName)}
-              {...form.register("email")}
+              disabled={submitting}
+              {...form.register("email", {
+                onChange: () => {
+                  form.clearErrors("email");
+                  setFormError(null);
+                },
+              })}
             />
             <FieldError errors={[form.formState.errors.email]} />
           </Field>
@@ -111,7 +194,13 @@ export function SignInForm() {
                 aria-invalid={!!form.formState.errors.password}
                 aria-required
                 className={cn(authInputClassName, "pr-14")}
-                {...form.register("password")}
+                disabled={submitting}
+                {...form.register("password", {
+                  onChange: () => {
+                    form.clearErrors("password");
+                    setFormError(null);
+                  },
+                })}
               />
               <button
                 type="button"
@@ -132,15 +221,23 @@ export function SignInForm() {
             </div>
             <FieldError errors={[form.formState.errors.password]} />
           </Field>
+
+          {formError ? (
+            <FieldError className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+              {formError}
+            </FieldError>
+          ) : null}
         </FieldGroup>
 
-        <AuthPrimaryButton>Continue</AuthPrimaryButton>
+        <AuthPrimaryButton type="submit" disabled={submitting || !supabaseReady}>
+          {submitting ? "Signing in…" : "Continue"}
+        </AuthPrimaryButton>
       </form>
 
       <p className="mt-8 text-left text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
         <Link href="/sign-up" className={authLinkClassName}>
-          create an account
+          Create an account
         </Link>
       </p>
     </div>

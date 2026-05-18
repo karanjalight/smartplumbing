@@ -14,22 +14,11 @@ import { toast } from "sonner";
 
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
+import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 5000, 10000];
 const KES_PER_TOKEN = 150;
 const LITRES_PER_TOKEN = 1000;
-const HOUSE_NUMBER = "A-12";
-const MONTHLY_RENT_KES = 15000;
-
-type ValidationOk = {
-  meterNo: string;
-  meterTypeLabel?: string;
-  customerName?: string;
-  customerAddress?: string;
-  latestVendingDate?: string;
-  merchantBalance?: number;
-  merchantName?: string;
-};
 
 type PurchaseOk = {
   orderNo: string;
@@ -102,20 +91,22 @@ function getErrorMessage(error: unknown): string {
   return "Unknown error";
 }
 
-export function ClientPaymentsView() {
+export function ClientPaymentsView({
+  profile,
+}: {
+  profile: ClientTenantProfile;
+}) {
   const [paymentType, setPaymentType] = useState<"water" | "rent">("water");
   const [amountInput, setAmountInput] = useState<string>("1000");
-  const [payerEmail, setPayerEmail] = useState("client@smartone.app");
-  const [meterNo, setMeterNo] = useState("");
-  const [validation, setValidation] = useState<ValidationOk | null>(null);
   const [purchaseResult, setPurchaseResult] = useState<PurchaseOk | null>(null);
-  const [validating, setValidating] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const payerEmail = profile.email.includes("@") ? profile.email : "client@smartone.app";
+  const meterNo = profile.meterNo.trim();
 
   const derived = useMemo(() => {
     if (paymentType === "rent") {
       return {
-        amountKes: MONTHLY_RENT_KES,
+        amountKes: profile.rentKes,
         tokens: 0,
         litres: 0,
       };
@@ -129,14 +120,7 @@ export function ClientPaymentsView() {
       tokens,
       litres: tokens * LITRES_PER_TOKEN,
     };
-  }, [paymentType, amountInput]);
-
-  function onMeterInputChange(value: string) {
-    const next = value.replace(/\D/g, "");
-    setMeterNo(next);
-    setValidation(null);
-    setPurchaseResult(null);
-  }
+  }, [paymentType, amountInput, profile.rentKes]);
 
   async function verifyAndVend(reference: string, meter: string, amountKes: number) {
     try {
@@ -185,62 +169,9 @@ export function ClientPaymentsView() {
     }
   }
 
-  async function handleValidateMeter() {
-    const m = meterNo.trim();
-    if (!m) {
-      toast.error("Enter your water meter number");
-      return;
-    }
-    setValidating(true);
-    setPurchaseResult(null);
-    try {
-      const res = await fetch("/api/longi/validate-meter", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meterNo: m }),
-      });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        error?: string;
-        meterNo?: string;
-        meterTypeLabel?: string;
-        customerName?: string;
-        customerAddress?: string;
-        latestVendingDate?: string;
-        merchantBalance?: number;
-        merchantName?: string;
-      };
-      if (!res.ok || !data.ok) {
-        toast.error(data.error || `Validation failed (${res.status})`);
-        setValidation(null);
-        return;
-      }
-      setValidation({
-        meterNo: data.meterNo ?? m,
-        meterTypeLabel: data.meterTypeLabel,
-        customerName: data.customerName,
-        customerAddress: data.customerAddress,
-        latestVendingDate: data.latestVendingDate,
-        merchantBalance: data.merchantBalance,
-        merchantName: data.merchantName,
-      });
-      toast.success("Meter verified");
-    } catch {
-      toast.error("Could not reach the server. Try again.");
-      setValidation(null);
-    } finally {
-      setValidating(false);
-    }
-  }
-
   async function handlePurchaseTokens() {
-    const m = meterNo.trim();
-    if (!m) {
-      toast.error("Enter your water meter number");
-      return;
-    }
-    if (!validation) {
-      toast.error("Validate your meter before purchasing");
+    if (!meterNo) {
+      toast.error("No meter is linked to your account. Contact your landlord.");
       return;
     }
     if (derived.amountKes <= 0) {
@@ -260,7 +191,7 @@ export function ClientPaymentsView() {
     setPurchasing(true);
     setPurchaseResult(null);
     try {
-      const reference = `smartone-${Date.now()}-${m.slice(-5)}`;
+      const reference = `smartone-${Date.now()}-${meterNo.slice(-5)}`;
       const amountKes = Number(derived.amountKes.toFixed(2));
 
       await ensurePaystackLoaded();
@@ -272,8 +203,9 @@ export function ClientPaymentsView() {
 
       const commonMetadata = {
         custom_fields: [
-          { display_name: "Meter No", variable_name: "meter_no", value: m },
-          { display_name: "Customer", variable_name: "customer_name", value: validation.customerName ?? "" },
+          { display_name: "Meter No", variable_name: "meter_no", value: meterNo },
+          { display_name: "Customer", variable_name: "customer_name", value: profile.name },
+          { display_name: "House", variable_name: "house", value: profile.houseLabel },
         ],
       };
 
@@ -285,7 +217,7 @@ export function ClientPaymentsView() {
       }
       paystackPop.setup({
         key: paystackPublicKey,
-        email: payerEmail.trim(),
+        email: payerEmail,
         amount: Math.round(amountKes * 100),
         currency: "KES",
         ref: reference,
@@ -295,7 +227,7 @@ export function ClientPaymentsView() {
           setPurchasing(false);
         },
         callback: (response) => {
-          void verifyAndVend(response.reference, m, amountKes);
+          void verifyAndVend(response.reference, meterNo, amountKes);
         },
       }).openIframe();
     } catch (error: unknown) {
@@ -328,7 +260,9 @@ export function ClientPaymentsView() {
 
         <div className="rounded-b-[2rem] bg-[#0A4266]  px-5 pt-8 pb-7 text-white">
           <h1 className="text-lg font-semibold">Make Payment</h1>
-          <p className="mt-1 text-xs text-white/70">Secure checkout for water tokens and rent</p>
+          <p className="mt-1 text-xs text-white/70">
+            {profile.name} · {profile.houseLabel}
+          </p>
 
           <div className="mt-5 flex gap-2 rounded-2xl bg-white/10 p-1.5">
             <label className="flex-1 cursor-pointer">
@@ -446,7 +380,7 @@ export function ClientPaymentsView() {
             ) : (
               <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
                 <p className="text-white/65">House Number</p>
-                <p className="mt-1 text-base font-semibold">{HOUSE_NUMBER}</p>
+                <p className="mt-1 text-base font-semibold">{profile.houseLabel}</p>
               </div>
             )}
           </div>
@@ -455,76 +389,23 @@ export function ClientPaymentsView() {
         <div className="px-5 pt-5">
           {paymentType === "water" ? (
             <div className="space-y-4">
-              <div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800">
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Payer email
+                  Your meter
                 </p>
-                <label className="sr-only" htmlFor="payer-email">
-                  Payer email address
-                </label>
-                <input
-                  id="payer-email"
-                  type="email"
-                  autoComplete="email"
-                  value={payerEmail}
-                  onChange={(e) => setPayerEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#0A4266]/30 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  LONGi meter number
+                {meterNo ? (
+                  <p className="mt-2 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {meterNo}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    No meter linked yet. Contact your landlord to assign one.
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {profile.houseLabel} · {profile.propertyName}
                 </p>
-                <label className="sr-only" htmlFor="meter-no">
-                  Water meter number
-                </label>
-                <input
-                  id="meter-no"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={meterNo}
-                  onChange={(e) => onMeterInputChange(e.target.value)}
-                  placeholder="e.g. 70002602046"
-                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-[#0A4266]/30 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <button
-                  type="button"
-                  onClick={handleValidateMeter}
-                  disabled={validating || !meterNo.trim()}
-                  className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                >
-                  {validating ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <CheckCircle2 className="size-4" aria-hidden />
-                  )}
-                  Validate meter
-                </button>
               </div>
-
-              {validation && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100">
-                  <p className="font-semibold">Meter verified</p>
-                  {validation.customerName && (
-                    <p className="mt-1 text-emerald-900/90 dark:text-emerald-100/90">
-                      {validation.customerName}
-                    </p>
-                  )}
-                  {validation.meterTypeLabel && (
-                    <p className="mt-0.5 text-xs text-emerald-800/90 dark:text-emerald-200/80">
-                      {validation.meterTypeLabel}
-                    </p>
-                  )}
-                  {validation.latestVendingDate && (
-                    <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-300/70">
-                      Last purchase: {validation.latestVendingDate}
-                    </p>
-                  )}
-                </div>
-              )}
 
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -556,10 +437,13 @@ export function ClientPaymentsView() {
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Rent details</p>
               <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
                 <p>
-                  House: <span className="font-semibold">{HOUSE_NUMBER}</span>
+                  House: <span className="font-semibold">{profile.houseLabel}</span>
                 </p>
                 <p>
-                  Monthly rent: <span className="font-semibold">KSh {MONTHLY_RENT_KES.toLocaleString()}</span>
+                  Monthly rent: <span className="font-semibold">{profile.rentLabel}</span>
+                </p>
+                <p>
+                  Property: <span className="font-semibold">{profile.propertyName}</span>
                 </p>
               </div>
             </div>
@@ -567,8 +451,8 @@ export function ClientPaymentsView() {
 
           <button
             type="button"
-            onClick={paymentType === "water" ? handlePurchaseTokens : undefined}
-            disabled={paymentType === "water" ? purchasing || !validation : false}
+            onClick={paymentType === "water" ? handlePurchaseTokens : () => toast.message("Rent checkout will use your tenant profile rent.")}
+            disabled={paymentType === "water" ? purchasing || !meterNo : false}
             className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0A4266] text-sm font-semibold text-white shadow-lg shadow-[#0A4266]/30 transition hover:bg-[#083d5c] disabled:opacity-50"
           >
             {paymentType === "water" && purchasing ? (

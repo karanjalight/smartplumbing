@@ -13,18 +13,22 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LandlordStatusBadge } from "@/components/dashboard/landlord-status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   TABLE_PAGE_SIZE_OPTIONS,
+  fetchLandlordRows,
   formatKes,
   getLandlordRows,
+  type LandlordRow,
   type LandlordStatus,
   type PayoutSchedule,
 } from "@/lib/landlords-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const STATUS_FILTER_OPTIONS: {
@@ -40,6 +44,7 @@ const STATUS_FILTER_OPTIONS: {
     hint: "KYC or contract in progress",
   },
   { key: "suspended", label: "Suspended", hint: "Payouts paused" },
+  { key: "inactive", label: "Inactive", hint: "Account not in use" },
 ];
 
 const PAYOUT_FILTER_OPTIONS: {
@@ -60,7 +65,11 @@ function payoutLabel(s: PayoutSchedule) {
 }
 
 export function LandlordsView() {
-  const allRows = useMemo(() => getLandlordRows(), []);
+  const pathname = usePathname();
+  const [allRows, setAllRows] = useState<LandlordRow[]>([]);
+  const [listSource, setListSource] = useState<"loading" | "mock" | "supabase">(
+    "loading",
+  );
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | LandlordStatus>("all");
@@ -74,6 +83,33 @@ export function LandlordsView() {
   const [pageSize, setPageSize] = useState(5);
   const payoutMenuRef = useRef<HTMLDivElement>(null);
   const statusMenuRef = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setAllRows(getLandlordRows());
+      setListSource("mock");
+      return;
+    }
+
+    try {
+      const rows = await fetchLandlordRows(supabase);
+      if (rows.length === 0) {
+        setAllRows(getLandlordRows());
+        setListSource("mock");
+        return;
+      }
+      setAllRows(rows);
+      setListSource("supabase");
+    } catch {
+      setAllRows(getLandlordRows());
+      setListSource("mock");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, pathname]);
 
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
@@ -112,6 +148,7 @@ export function LandlordsView() {
         r.phone.replace(/\s/g, "").includes(q.replace(/\s/g, "")) ||
         r.email.toLowerCase().includes(q) ||
         r.id.toLowerCase().includes(q) ||
+        (r.code?.toLowerCase().includes(q) ?? false) ||
         r.region.toLowerCase().includes(q)
       );
     });
@@ -194,6 +231,13 @@ export function LandlordsView() {
             Property owners and managers: portfolios, water revenue, payouts, and
             alerts.
           </p>
+          {listSource === "loading" ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading landlords…</p>
+          ) : listSource === "mock" ? (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              Showing demo data — sign in as admin with Supabase configured for live records.
+            </p>
+          ) : null}
         </div>
         <Link
           href="/dashboard/landlords/new"
@@ -243,7 +287,9 @@ export function LandlordsView() {
             {formatKes(summary.monthlyPlatformCollection)}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Platform water revenue (mock roll-up)
+            {listSource === "supabase"
+              ? "Platform water revenue"
+              : "Platform water revenue (demo data)"}
           </p>
         </div>
       </div>
@@ -531,7 +577,13 @@ export function LandlordsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {pageRows.length === 0 ? (
+              {listSource === "loading" ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    Loading landlords from Supabase…
+                  </td>
+                </tr>
+              ) : pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                     No landlords match your search or filters.
@@ -547,7 +599,9 @@ export function LandlordsView() {
                         </div>
                         <div className="min-w-0">
                           <div className="font-semibold leading-snug text-foreground">{row.company}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{row.id}</div>
+                          <div className="font-mono text-xs text-muted-foreground">
+                            {row.code ?? row.id}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -584,7 +638,9 @@ export function LandlordsView() {
                         {formatKes(row.monthlyCollectionKes)}
                         <span className="ml-1 text-xs font-normal text-muted-foreground">/ mo</span>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">Platform water roll-up (mock)</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {listSource === "supabase" ? "Platform water roll-up" : "Platform water roll-up (demo)"}
+                      </p>
                     </td>
                     <td className="min-w-[140px] px-4 py-3 align-top">
                       <p className="text-sm font-medium text-foreground">{payoutLabel(row.payoutSchedule)}</p>

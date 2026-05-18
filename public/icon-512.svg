@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Smart Plumbing icon">
+  <rect width="512" height="512" rx="96" fill="#0A4266"/>
+  <path d="M256 108c-58 64-92 120-92 170 0 50 41 91 92 91s92-41 92-91c0-50-34-106-92-170z" fill="#6BB4E8"/>
+  <circle cx="256" cy="278" r="40" fill="#ffffff" opacity="0.95"/>
+</svg>

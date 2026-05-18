@@ -10,27 +10,28 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  deleteTenantRecord,
+  updateTenantRecord,
+} from "@/app/(dashboard)/dashboard/tenants/actions";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
-import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { BuildingListRow } from "@/lib/buildings-data";
 import {
-  type PortfolioStore,
-  defaultTenantForLandlord,
-  deleteLandlordTenant,
-  getLandlordBuildingsMerged,
-  getLandlordTenantsMerged,
-  getMergedHousesForBuilding,
-  upsertLandlordTenant,
-} from "@/lib/landlord-portfolio-storage";
+  fetchBuildingsByLandlordId,
+  fetchHousesForBuilding,
+  type BuildingListRow,
+  type HouseUnitRow,
+} from "@/lib/buildings-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   TABLE_PAGE_SIZE_OPTIONS,
+  fetchTenantRowsForLandlord,
   formatKes,
   type TenantRow,
   type TenantStatus,
@@ -45,70 +46,69 @@ const STATUS_OPTIONS: { key: TenantStatus; label: string }[] = [
 ];
 
 function normalizeTenantRow(
-  initial: TenantRow | null,
-  landlordId: string,
+  tenant: TenantRow,
   buildings: BuildingListRow[],
-  store: PortfolioStore
 ): TenantRow {
-  const base =
-    initial ??
-    defaultTenantForLandlord(landlordId, buildings[0]?.name ?? "New property");
-  let next = { ...base };
+  let next = { ...tenant };
   if (!next.buildingId && buildings.length) {
     const byName = buildings.find((b) => b.name === next.property);
     if (byName) next = { ...next, buildingId: byName.id };
-  }
-  if (next.buildingId && !next.houseUnitId?.trim()) {
-    const b = buildings.find((x) => x.id === next.buildingId);
-    if (b) {
-      const houses = getMergedHousesForBuilding(b, store);
-      const match = houses.find((h) => h.label.trim() === (next.unit ?? "").trim());
-      if (match) next = { ...next, houseUnitId: match.id };
-    }
   }
   return next;
 }
 
 function TenantEditorModal({
-  open,
   onClose,
   landlordId,
   buildings,
-  store,
   allTenants,
-  initial,
+  tenant,
+  onSaved,
 }: {
-  open: boolean;
   onClose: () => void;
   landlordId: string;
   buildings: BuildingListRow[];
-  store: PortfolioStore;
   allTenants: TenantRow[];
-  initial: TenantRow | null;
+  tenant: TenantRow;
+  onSaved: () => void;
 }) {
   const [row, setRow] = useState<TenantRow>(() =>
-    normalizeTenantRow(initial, landlordId, buildings, store)
+    normalizeTenantRow(tenant, buildings)
   );
+  const [saving, setSaving] = useState(false);
+  const [liveHouses, setLiveHouses] = useState<HouseUnitRow[]>([]);
 
   useEffect(() => {
-    if (open) {
-      setRow(normalizeTenantRow(initial, landlordId, buildings, store));
-    }
-  }, [open, initial, landlordId, buildings, store]);
+    setRow(normalizeTenantRow(tenant, buildings));
+  }, [tenant, buildings]);
 
   const selectedBuilding = useMemo(
     () => buildings.find((b) => b.id === row.buildingId) ?? buildings[0],
     [buildings, row.buildingId]
   );
 
+  useEffect(() => {
+    if (!selectedBuilding?.id) {
+      setLiveHouses([]);
+      return;
+    }
+    let cancelled = false;
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) return;
+    void fetchHousesForBuilding(supabase, selectedBuilding.id).then((houses) => {
+      if (!cancelled) setLiveHouses(houses);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBuilding?.id]);
+
   const housesForBuilding = useMemo(() => {
     if (!selectedBuilding) return [];
-    return getMergedHousesForBuilding(selectedBuilding, store);
-  }, [selectedBuilding, store]);
+    return liveHouses;
+  }, [selectedBuilding, liveHouses]);
 
-  if (!open) return null;
-
-  function save() {
+  async function save() {
     if (!row.name.trim()) {
       toast.error("Name is required");
       return;
@@ -131,7 +131,8 @@ function TenantEditorModal({
         return;
       }
     }
-    upsertLandlordTenant({
+
+    const payload = {
       ...row,
       name: row.name.trim(),
       phone: row.phone.trim(),
@@ -140,9 +141,33 @@ function TenantEditorModal({
       unit: row.unit.trim() || "—",
       buildingId: row.buildingId ?? null,
       houseUnitId: row.houseUnitId?.trim() || null,
-    });
-    toast.success(initial ? "Tenant updated" : "Tenant added");
-    onClose();
+    };
+
+    setSaving(true);
+    try {
+      const result = await updateTenantRecord({
+        tenantId: row.id,
+        landlordId,
+        fullName: payload.name,
+        phone: payload.phone,
+        status: payload.status,
+        balanceKes: payload.balanceKes,
+        buildingId: payload.buildingId ?? undefined,
+        unitId: payload.houseUnitId ?? undefined,
+        meterNo: payload.meterId !== "—" ? payload.meterId : undefined,
+        lastTokenAt: payload.lastTokenDate,
+        lastTokenPreview: payload.lastTokenPreview,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Tenant updated");
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   const selectClass =
@@ -163,7 +188,7 @@ function TenantEditorModal({
         className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-lg dark:border-border/80"
       >
         <h2 id="tenant-editor-title" className="text-lg font-semibold text-foreground">
-          {initial ? "Edit tenant" : "Add tenant"}
+          Edit tenant
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Pick a building, then the house or unit. The tenant is linked to that unit row (same as on the building detail).
@@ -336,10 +361,11 @@ function TenantEditorModal({
           </Button>
           <Button
             type="button"
+            disabled={saving}
             className="rounded-full bg-[#0A4266] text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
-            onClick={save}
+            onClick={() => void save()}
           >
-            Save
+            {saving ? "Saving…" : "Save"}
           </Button>
         </div>
       </div>
@@ -347,8 +373,14 @@ function TenantEditorModal({
   );
 }
 
+type TenantListState =
+  | { status: "loading" }
+  | { status: "live"; rows: TenantRow[] }
+  | { status: "error"; message: string };
+
 export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
-  const store = useLandlordPortfolioStore();
+  const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
@@ -358,18 +390,84 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
   const [buildingCategory, setBuildingCategory] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<TenantRow | null>(null);
+  const [tenantList, setTenantList] = useState<TenantListState>({ status: "loading" });
+  const [liveBuildings, setLiveBuildings] = useState<BuildingListRow[]>([]);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const tenants = useMemo(
-    () => (store ? getLandlordTenantsMerged(landlordId, store) : []),
-    [store, landlordId]
-  );
+  const loadTenants = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setTenantList({
+        status: "error",
+        message: "Supabase is not configured.",
+      });
+      return;
+    }
+    try {
+      const rows = await fetchTenantRowsForLandlord(supabase, landlordId);
+      setTenantList({ status: "live", rows });
+    } catch (e) {
+      setTenantList({
+        status: "error",
+        message:
+          e instanceof Error ? e.message : "Could not load tenants.",
+      });
+    }
+  }, [landlordId]);
 
-  const buildings = useMemo(
-    () => (store ? getLandlordBuildingsMerged(landlordId, store) : []),
-    [store, landlordId]
-  );
+  useEffect(() => {
+    void loadTenants();
+  }, [loadTenants, pathname]);
+
+  useEffect(() => {
+    if (tenantList.status !== "live") {
+      setLiveBuildings([]);
+      return;
+    }
+    let cancelled = false;
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) return;
+    void fetchBuildingsByLandlordId(supabase, landlordId).then((rows) => {
+      if (!cancelled) setLiveBuildings(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantList.status, landlordId]);
+
+  const tenants = useMemo(() => {
+    if (tenantList.status === "live") return tenantList.rows;
+    return [];
+  }, [tenantList]);
+
+  const buildings = liveBuildings;
+
+  async function handleRemoveTenant(row: TenantRow) {
+    if (
+      typeof window === "undefined" ||
+      !window.confirm(`Remove tenant ${row.name} from your list?`)
+    ) {
+      return;
+    }
+
+    setRemovingId(row.id);
+    try {
+      const result = await deleteTenantRecord({
+        tenantId: row.id,
+        landlordId,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Tenant removed");
+      await loadTenants();
+      router.refresh();
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!highlightId || !highlightRef.current) return;
@@ -423,10 +521,18 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
   const showingFrom = filtered.length === 0 ? 0 : start + 1;
   const showingTo = start + pageRows.length;
 
-  if (store === null) {
+  if (tenantList.status === "loading") {
     return (
       <div className="space-y-4 py-12 text-center text-sm text-muted-foreground">
         Loading tenants…
+      </div>
+    );
+  }
+
+  if (tenantList.status === "error") {
+    return (
+      <div className="space-y-4 py-12 text-center text-sm text-destructive">
+        {tenantList.message}
       </div>
     );
   }
@@ -439,23 +545,19 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
             Tenants
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage tenant accounts for your portfolio. Changes are saved in this browser (demo).
+            Tenants assigned to units in your buildings. Only real records from your account are shown.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setEditorOpen(true);
-          }}
+        <Link
+          href="/landlords/dashboard/tenants/new"
           className={cn(
             buttonVariants({ variant: "default" }),
-            "h-10 shrink-0 rounded-full bg-[#0A4266] px-4 text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
+            "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0A4266] px-4 text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
           )}
         >
           <Plus className="size-4" aria-hidden />
           Add tenant
-        </button>
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -591,7 +693,7 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
                     )}
                   >
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">
-                      {row.id}
+                      {row.code ?? row.id}
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{row.name}</div>
@@ -639,7 +741,6 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
                           aria-label={`Edit ${row.name}`}
                           onClick={() => {
                             setEditing(row);
-                            setEditorOpen(true);
                           }}
                         >
                           <Pencil className="size-4" />
@@ -650,15 +751,8 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
                           size="icon-sm"
                           className="rounded-full text-destructive hover:text-destructive"
                           aria-label={`Remove ${row.name}`}
-                          onClick={() => {
-                            if (
-                              typeof window !== "undefined" &&
-                              window.confirm(`Remove tenant ${row.name} from your list?`)
-                            ) {
-                              deleteLandlordTenant(row.id);
-                              toast.success("Tenant removed");
-                            }
-                          }}
+                          disabled={removingId === row.id}
+                          onClick={() => void handleRemoveTenant(row)}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -717,18 +811,16 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
         </div>
       </div>
 
-      <TenantEditorModal
-        open={editorOpen}
-        onClose={() => {
-          setEditorOpen(false);
-          setEditing(null);
-        }}
-        landlordId={landlordId}
-        buildings={buildings}
-        store={store}
-        allTenants={tenants}
-        initial={editing}
-      />
+      {editing && (
+        <TenantEditorModal
+          onClose={() => setEditing(null)}
+          landlordId={landlordId}
+          buildings={buildings}
+          allTenants={tenants}
+          tenant={editing}
+          onSaved={() => void loadTenants()}
+        />
+      )}
     </div>
   );
 }

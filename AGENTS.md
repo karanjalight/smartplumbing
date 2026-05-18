@@ -8,3 +8,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - **Vision and objectives:** `docs/PROJECT_PROPOSAL.md` (smart water billing, tenants, landlords, M-Pesa, PWA).
 - **API reference:** add or update `docs/API.md` when backend or integration docs are available.
+- **Backend / database:** `docs/SUPABASE.md` describes the Supabase schema (`supabase/migrations/`), RLS rules, storage buckets, and how the `lib/*-data.ts` helpers map onto real tables. Update it whenever you change the schema or wire a new screen to the database.

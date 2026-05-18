@@ -1,19 +1,38 @@
 import { BuildingDetailView } from "@/components/dashboard/building-detail-view";
-import { getBuildingById } from "@/lib/buildings-data";
+import { getBuildingById, loadBuildingDetailFromSupabase } from "@/lib/buildings-data";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
+  try {
+    const supabase = await getSupabaseServerClient();
+    const { data } = await supabase.from("buildings").select("name").eq("id", id).maybeSingle();
+    if (data?.name) {
+      return { title: `${data.name} — Buildings — Smart Plumbing Admin` };
+    }
+  } catch {
+    /* env / network */
+  }
   const b = getBuildingById(id);
   return {
-    title: b
-      ? `${b.name} — Buildings — Smart Plumbing Admin`
-      : "Building — Smart Plumbing Admin",
+    title: b ? `${b.name} — Buildings — Smart Plumbing Admin` : "Building — Smart Plumbing Admin",
   };
 }
 
 export default async function BuildingDetailPage({ params }: Props) {
   const { id } = await params;
-  return <BuildingDetailView buildingId={id} />;
+
+  let initialDetail: Awaited<ReturnType<typeof loadBuildingDetailFromSupabase>> = null;
+  try {
+    const supabase = await getSupabaseServerClient();
+    initialDetail = await loadBuildingDetailFromSupabase(supabase, { buildingId: id });
+  } catch {
+    /* client fallback (demo seed) */
+  }
+
+  return (
+    <BuildingDetailView buildingId={id} initialDetail={initialDetail ?? undefined} />
+  );
 }

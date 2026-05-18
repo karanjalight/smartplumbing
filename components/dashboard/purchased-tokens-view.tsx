@@ -2,19 +2,21 @@
 
 import { Check, ChevronDown, CreditCard, Headphones, MapPin, Search, Smartphone, Ticket } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   channelLabel,
+  fetchTokenPurchaseRows,
   getBasePurchasedTokenRows,
-  readStoredManualPurchases,
   sourceLabel,
   TOKEN_PURCHASE_PAGE_SIZE_OPTIONS,
   type TokenPurchaseRow,
   type TokenPurchaseSource,
 } from "@/lib/tokens-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const SOURCE_OPTIONS: { key: "all" | TokenPurchaseSource; label: string }[] = [
@@ -27,33 +29,34 @@ const SOURCE_OPTIONS: { key: "all" | TokenPurchaseSource; label: string }[] = [
 const DROPDOWN_TRIGGER =
   "flex h-10 w-full items-center justify-between gap-2 rounded-full border border-border bg-background px-3 text-left text-sm dark:border-border/80 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-function mergeLedgerRows(): TokenPurchaseRow[] {
-  const base = getBasePurchasedTokenRows();
-  const stored = readStoredManualPurchases();
-  const seen = new Set<string>();
-  const out: TokenPurchaseRow[] = [];
-  for (const r of [...stored, ...base]) {
-    if (seen.has(r.id)) continue;
-    seen.add(r.id);
-    out.push(r);
-  }
-  return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
 export function PurchasedTokensView() {
-  const [rows, setRows] = useState<TokenPurchaseRow[]>(() => mergeLedgerRows());
+  const pathname = usePathname();
+  const [rows, setRows] = useState<TokenPurchaseRow[]>([]);
+  const [listSource, setListSource] = useState<"loading" | "mock" | "supabase">(
+    "loading",
+  );
+
+  const load = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setRows(getBasePurchasedTokenRows());
+      setListSource("mock");
+      return;
+    }
+
+    try {
+      const data = await fetchTokenPurchaseRows(supabase, { limit: 500 });
+      setRows(data);
+      setListSource("supabase");
+    } catch {
+      setRows(getBasePurchasedTokenRows());
+      setListSource("mock");
+    }
+  }, []);
 
   useEffect(() => {
-    function onUpdate() {
-      setRows(mergeLedgerRows());
-    }
-    window.addEventListener("smartone-tokens-updated", onUpdate);
-    window.addEventListener("storage", onUpdate);
-    return () => {
-      window.removeEventListener("smartone-tokens-updated", onUpdate);
-      window.removeEventListener("storage", onUpdate);
-    };
-  }, []);
+    void load();
+  }, [load, pathname]);
 
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | TokenPurchaseSource>("all");
@@ -114,6 +117,13 @@ export function PurchasedTokensView() {
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             All STS token purchases: M-Pesa, tenant app, and admin manual issuances. Use filters to narrow by source.
           </p>
+          {listSource === "loading" ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading token ledger…</p>
+          ) : listSource === "mock" ? (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              Showing demo data — sign in as admin with Supabase configured for live records.
+            </p>
+          ) : null}
         </div>
         <div
           className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-[#0A4266]/10 dark:bg-[#6BB4E8]/15"
@@ -239,10 +249,18 @@ export function PurchasedTokensView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {pageRows.length === 0 ? (
+                {listSource === "loading" ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                      No rows match your search.
+                      Loading token purchases from Supabase…
+                    </td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                      {rows.length === 0
+                        ? "No token purchases yet. Issue one from Manual tokens."
+                        : "No rows match your search."}
                     </td>
                   </tr>
                 ) : (

@@ -1,11 +1,52 @@
+import { redirect } from "next/navigation";
+
 import { LandlordMetersView } from "@/components/landlord/landlord-meters-view";
-import { LANDLORD_PORTAL_LANDLORD_ID } from "@/lib/landlord-finance-data";
+import { fetchMeterRowsForLandlord } from "@/lib/meters-data";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Meters — Landlord portal",
-  description: "Assign smart water meters to tenant units.",
+  description: "Smart water meters across your buildings and tenant units.",
 };
 
-export default function LandlordMetersPage() {
-  return <LandlordMetersView landlordId={LANDLORD_PORTAL_LANDLORD_ID} />;
+export default async function LandlordMetersPage() {
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/landlords/login");
+  }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role !== "landlord") {
+    redirect("/landlords/login");
+  }
+  const { data: landlord } = await supabase
+    .from("landlords")
+    .select("id")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  if (!landlord?.id) {
+    redirect("/landlords/login");
+  }
+
+  let initialRows: Awaited<ReturnType<typeof fetchMeterRowsForLandlord>> = [];
+  let initialListSource: "supabase" | "mock" = "supabase";
+  try {
+    initialRows = await fetchMeterRowsForLandlord(supabase, landlord.id);
+  } catch {
+    initialListSource = "mock";
+  }
+
+  return (
+    <LandlordMetersView
+      landlordId={landlord.id}
+      initialRows={initialListSource === "supabase" ? initialRows : undefined}
+      initialListSource={initialListSource}
+    />
+  );
 }

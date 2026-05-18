@@ -10,6 +10,7 @@ import Link from "next/link";
 
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
+import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
 
 const DASHBOARD_ACTIONS = [
   {
@@ -38,7 +39,13 @@ const DASHBOARD_ACTIONS = [
   },
 ];
 
-export function ClientDashboardView() {
+export function ClientDashboardView({
+  profile,
+}: {
+  profile: ClientTenantProfile;
+}) {
+  const firstName = profile.name.trim().split(/\s+/)[0] || "there";
+
   return (
     <main className="min-h-screen dark:bg-slate-950">
       <section className="relative mx-auto w-full max-w-sm overflow-hidden rounded-[2rem]  bg-white px-4 pt-6 pb-24 dark:border-slate-800 dark:bg-slate-950">
@@ -46,9 +53,11 @@ export function ClientDashboardView() {
 
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-[#123C74] dark:text-[#9FC2FF]">
-            Hi Muche!
+            Hi {firstName}!
           </h1>
-          <p className="mt-0.5 text-sm text-slate-400">Good Morning</p>
+          <p className="mt-0.5 text-sm text-slate-400">
+            {profile.houseLabel} · {profile.propertyName}
+          </p>
         </div>
 
         <div className="mt-5 flex h-11 items-center gap-2 rounded-full border bg-slate-200 px-4 dark:bg-slate-800">
@@ -66,7 +75,7 @@ export function ClientDashboardView() {
             <div>
               <p className="text-base font-semibold text-[#123C74] dark:text-[#9FC2FF]">Welcome!</p>
               <p className="mt-1 text-xs text-slate-500">
-                Let&apos;s schedule your rent and water payments.
+                Rent: {profile.rentLabel} · Balance: {profile.balanceLabel}
               </p>
             </div>
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#123C74]/10 dark:bg-[#9FC2FF]/15">

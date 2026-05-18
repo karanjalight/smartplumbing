@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { z } from "zod";
 
 import { AuthPrimaryButton } from "@/components/auth-primary-button";
@@ -21,6 +22,9 @@ import {
   authInputClassName,
   authLinkClassName,
 } from "@/lib/auth-ui";
+import { getPublicSupabaseConfig } from "@/lib/supabase/env";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { UserRole } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
 
 const clientLoginSchema = z.object({
@@ -33,6 +37,8 @@ type ClientLoginValues = z.infer<typeof clientLoginSchema>;
 export function ClientLoginForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<ClientLoginValues>({
     resolver: zodResolver(clientLoginSchema),
@@ -42,6 +48,76 @@ export function ClientLoginForm() {
     },
     mode: "onBlur",
   });
+
+  const supabaseReady = Boolean(getPublicSupabaseConfig());
+
+  async function onSubmit(values: ClientLoginValues) {
+    form.clearErrors();
+    setFormError(null);
+
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setFormError(
+        "Client sign-in is not available yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      });
+
+      if (error) {
+        form.setError("password", {
+          type: "server",
+          message: error.message,
+        });
+        return;
+      }
+
+      const user = data.user;
+      if (!user) {
+        form.setError("password", {
+          type: "server",
+          message: "No user was returned from sign-in. Try again.",
+        });
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        setFormError(
+          profileError.message || "Could not load your client profile. Try again.",
+        );
+        return;
+      }
+
+      const role = (profile?.role ?? "tenant") as UserRole;
+      if (role !== "tenant") {
+        await supabase.auth.signOut();
+        setFormError(
+          role === "landlord"
+            ? "This email belongs to a landlord account. Use the landlord portal instead."
+            : "This email is not registered as a client account.",
+        );
+        return;
+      }
+
+      toast.success("Signed in");
+      router.refresh();
+      router.push("/clients/dashboard");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-4 py-8 dark:bg-slate-950">
@@ -54,11 +130,28 @@ export function ClientLoginForm() {
           Sign in to view your rent, water bills, and payment records.
         </p>
 
+        {!supabaseReady && (
+          <p
+            className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+          >
+            Supabase is not configured. Add the public URL and anon key to enable
+            client sign-in.
+          </p>
+        )}
+
+        {formError && (
+          <div
+            role="alert"
+            className="mt-6 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive dark:border-destructive/50 dark:bg-destructive/15"
+          >
+            <p>{formError}</p>
+          </div>
+        )}
+
         <form
           className="mt-8 space-y-6"
-          onSubmit={form.handleSubmit(() => {
-            router.push("/clients/dashboard");
-          })}
+          onSubmit={form.handleSubmit(onSubmit)}
           noValidate
         >
           <FieldGroup className="gap-6">
@@ -74,7 +167,13 @@ export function ClientLoginForm() {
                 aria-invalid={!!form.formState.errors.email}
                 aria-required
                 className={cn(authInputClassName)}
-                {...form.register("email")}
+                disabled={submitting}
+                {...form.register("email", {
+                  onChange: () => {
+                    form.clearErrors("email");
+                    setFormError(null);
+                  },
+                })}
               />
               <FieldError errors={[form.formState.errors.email]} />
             </Field>
@@ -98,7 +197,13 @@ export function ClientLoginForm() {
                   aria-invalid={!!form.formState.errors.password}
                   aria-required
                   className={cn(authInputClassName, "pr-14")}
-                  {...form.register("password")}
+                  disabled={submitting}
+                  {...form.register("password", {
+                    onChange: () => {
+                      form.clearErrors("password");
+                      setFormError(null);
+                    },
+                  })}
                 />
                 <button
                   type="button"
@@ -121,7 +226,9 @@ export function ClientLoginForm() {
             </Field>
           </FieldGroup>
 
-          <AuthPrimaryButton>Sign in</AuthPrimaryButton>
+          <AuthPrimaryButton type="submit" disabled={submitting || !supabaseReady}>
+            {submitting ? "Signing in..." : "Sign in"}
+          </AuthPrimaryButton>
         </form>
 
         <p className="mt-7 text-sm text-muted-foreground">

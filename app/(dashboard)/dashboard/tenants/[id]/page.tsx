@@ -1,14 +1,28 @@
 import { notFound } from "next/navigation";
-import { use } from "react";
 
 import { TenantDetailView } from "@/components/dashboard/tenant-detail-view";
-import { getTenantById } from "@/lib/tenants-data";
+import {
+  fetchTenantDetailById,
+  getTenantById,
+} from "@/lib/tenants-data";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-type PageProps = { params: Promise<{ id: string }> };
+type Props = { params: Promise<{ id: string }> };
 
-export async function generateMetadata({ params }: PageProps) {
+async function resolveTenant(id: string) {
+  try {
+    const supabase = await getSupabaseServerClient();
+    const fromDb = await fetchTenantDetailById(supabase, id);
+    if (fromDb) return fromDb;
+  } catch {
+    /* fall through to mock */
+  }
+  return getTenantById(id);
+}
+
+export async function generateMetadata({ params }: Props) {
   const { id } = await params;
-  const tenant = getTenantById(id);
+  const tenant = await resolveTenant(id);
   return {
     title: tenant
       ? `${tenant.name} — Tenant — Smart Plumbing`
@@ -17,9 +31,9 @@ export async function generateMetadata({ params }: PageProps) {
   };
 }
 
-export default function Page({ params }: PageProps) {
-  const { id } = use(params);
-  const tenant = getTenantById(id);
+export default async function TenantDetailPage({ params }: Props) {
+  const { id } = await params;
+  const tenant = await resolveTenant(id);
   if (!tenant) notFound();
   return <TenantDetailView tenant={tenant} />;
 }

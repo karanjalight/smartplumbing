@@ -12,13 +12,16 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
 import { getLandlordMeterRowsMerged } from "@/lib/landlord-meters-data";
+import { readStore } from "@/lib/landlord-portfolio-storage";
 import {
+  fetchMeterRowsForLandlord,
   meterTypeLabel,
   TABLE_PAGE_SIZE_OPTIONS,
   type MeterConnectivity,
@@ -26,6 +29,7 @@ import {
   type MeterModelType,
   type MeterRow,
 } from "@/lib/meters-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const DROPDOWN_TRIGGER =
@@ -73,6 +77,7 @@ function connectivityBadge(connectivity: MeterConnectivity) {
     intermittent:
       "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
     offline: "bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
+    unknown: "bg-muted text-muted-foreground",
   };
   return (
     <span
@@ -100,12 +105,45 @@ function needsAttention(row: MeterRow) {
   );
 }
 
-export function LandlordMetersView({ landlordId }: { landlordId: string }) {
-  const store = useLandlordPortfolioStore();
-  const allRows = useMemo(
-    () => (store ? getLandlordMeterRowsMerged(landlordId, store) : []),
-    [store, landlordId]
+export type LandlordMetersViewProps = {
+  landlordId: string;
+  /** Optional rows loaded on the server for first paint. */
+  initialRows?: MeterRow[];
+  initialListSource?: "supabase" | "mock";
+};
+
+export function LandlordMetersView({
+  landlordId,
+  initialRows,
+  initialListSource = "supabase",
+}: LandlordMetersViewProps) {
+  const pathname = usePathname();
+  const portfolio = useLandlordPortfolioStore();
+  const [allRows, setAllRows] = useState<MeterRow[]>(initialRows ?? []);
+  const [listSource, setListSource] = useState<"loading" | "mock" | "supabase">(
+    initialRows !== undefined ? initialListSource : "loading",
   );
+
+  const load = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setAllRows(getLandlordMeterRowsMerged(landlordId, readStore()));
+      setListSource("mock");
+      return;
+    }
+    try {
+      const rows = await fetchMeterRowsForLandlord(supabase, landlordId);
+      setAllRows(rows);
+      setListSource("supabase");
+    } catch {
+      setAllRows(getLandlordMeterRowsMerged(landlordId, readStore()));
+      setListSource("mock");
+    }
+  }, [landlordId]);
+
+  useEffect(() => {
+    void load();
+  }, [load, pathname, portfolio]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | MeterLifecycleStatus>("all");
@@ -151,7 +189,7 @@ export function LandlordMetersView({ landlordId }: { landlordId: string }) {
       if (!q) return true;
       return (
         r.meterId.toLowerCase().includes(q) ||
-        r.serialNumber.toLowerCase().includes(q) ||
+        r.supplier.toLowerCase().includes(q) ||
         (r.tenantName ?? "").toLowerCase().includes(q) ||
         (r.buildingName ?? "").toLowerCase().includes(q) ||
         (r.unitLabel ?? "").toLowerCase().includes(q) ||
@@ -184,7 +222,7 @@ export function LandlordMetersView({ landlordId }: { landlordId: string }) {
   const connectivityLabel =
     CONNECTIVITY_FILTER_OPTIONS.find((o) => o.key === connectivityFilter)?.label ?? "Connectivity";
 
-  if (store === null) {
+  if (listSource === "loading") {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">Loading meters…</div>
     );
@@ -198,18 +236,20 @@ export function LandlordMetersView({ landlordId }: { landlordId: string }) {
             Smart meters
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Meters linked to your tenants and buildings. Provisioning new devices is done from the
-            operations dashboard.
+            Meters linked to your buildings and tenant units.
+            {listSource === "mock"
+              ? " Showing demo data — sign in with Supabase to load live meters."
+              : ""}
           </p>
         </div>
         <Link
-          href="/dashboard/meters/onboard"
+          href="/landlords/dashboard/meters/onboard"
           className={cn(
             buttonVariants({ variant: "outline" }),
             "h-10 shrink-0 rounded-full border-[#0A4266]/40 px-4 dark:border-[#6BB4E8]/50"
           )}
         >
-          Request onboarding (admin)
+          Onboard meter
         </Link>
       </div>
 
@@ -255,7 +295,7 @@ export function LandlordMetersView({ landlordId }: { landlordId: string }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search meter, serial, tenant, building…"
+            placeholder="Search meter, supplier, tenant, building…"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);

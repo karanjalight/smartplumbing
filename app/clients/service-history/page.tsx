@@ -1,6 +1,18 @@
 import { ClientHistoryView } from "@/components/client/client-history-view";
+import { loadClientServiceBookings } from "@/lib/client-service-bookings";
+import { serviceRequestHistoryStatus } from "@/lib/service-requests-data";
 
-export default function ClientsServiceHistoryPage() {
+export default async function ClientsServiceHistoryPage() {
+  const { bookings } = await loadClientServiceBookings();
+
+  const records = bookings.map((booking) => ({
+    id: booking.id,
+    title: booking.serviceType,
+    subtitle: `Request ${booking.code}`,
+    status: serviceRequestHistoryStatus(booking.statusKey),
+    date: booking.preferredDate,
+  }));
+
   return (
     <ClientHistoryView
       title="Service History"
@@ -8,26 +20,8 @@ export default function ClientsServiceHistoryPage() {
       summary="Review completed and pending maintenance service requests."
       ctaHref="/clients/services/book"
       ctaLabel="Book service"
-      records={[
-        {
-          title: "Kitchen Leak Repair",
-          subtitle: "Request #SR-932",
-          status: "success",
-          date: "03 Apr 2026",
-        },
-        {
-          title: "Meter Valve Check",
-          subtitle: "Request #SR-904",
-          status: "success",
-          date: "24 Mar 2026",
-        },
-        {
-          title: "Bathroom Drain Unclogging",
-          subtitle: "Request #SR-951",
-          status: "pending",
-          date: "Scheduled Friday",
-        },
-      ]}
+      records={records}
+      emptyMessage="No service requests yet. Book your first maintenance visit from Services."
     />
   );
 }

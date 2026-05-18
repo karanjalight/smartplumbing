@@ -18,12 +18,13 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { LandlordStatusBadge } from "@/components/dashboard/landlord-status-badge";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
+  fetchBuildingsByLandlordId,
   getBuildingsByLandlordId,
   getHousesForBuilding,
   rentSummary,
@@ -31,11 +32,15 @@ import {
 } from "@/lib/buildings-data";
 import {
   TABLE_PAGE_SIZE_OPTIONS,
+  fetchPayoutHistoryForLandlord,
+  fetchTenantsForLandlord,
   formatKes,
   getPayoutHistoryForLandlord,
   type LandlordPayoutRow,
   type LandlordRow,
 } from "@/lib/landlords-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { TenantRow as UiTenantRow } from "@/lib/tenants-data";
 import { MOCK_TENANTS } from "@/lib/tenants-data";
 import { cn } from "@/lib/utils";
 
@@ -120,18 +125,46 @@ function BuildingCard({ building }: { building: BuildingListRow }) {
 }
 
 export function LandlordDetailView({ landlord }: { landlord: LandlordRow }) {
-  const buildings = useMemo(
-    () => getBuildingsByLandlordId(landlord.id),
-    [landlord.id]
+  const [buildings, setBuildings] = useState<BuildingListRow[]>(() =>
+    getBuildingsByLandlordId(landlord.id),
   );
-  const tenants = useMemo(
-    () => MOCK_TENANTS.filter((t) => t.landlordId === landlord.id),
-    [landlord.id]
+  const [tenants, setTenants] = useState<UiTenantRow[]>(() =>
+    MOCK_TENANTS.filter((t) => t.landlordId === landlord.id),
   );
-  const payouts = useMemo(
-    () => getPayoutHistoryForLandlord(landlord.id),
-    [landlord.id]
+  const [payouts, setPayouts] = useState<LandlordPayoutRow[]>(() =>
+    getPayoutHistoryForLandlord(landlord.id),
   );
+  const [portfolioSource, setPortfolioSource] = useState<"mock" | "supabase">("mock");
+
+  const loadPortfolio = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) return;
+
+    try {
+      const [buildingRows, tenantRows, payoutRows] = await Promise.all([
+        fetchBuildingsByLandlordId(supabase, landlord.id, {
+          company: landlord.company,
+          full_name: landlord.name,
+        }),
+        fetchTenantsForLandlord(supabase, landlord.id),
+        fetchPayoutHistoryForLandlord(supabase, landlord.id),
+      ]);
+
+      setBuildings(buildingRows);
+      setTenants(tenantRows);
+      setPayouts(payoutRows.length > 0 ? payoutRows : getPayoutHistoryForLandlord(landlord.id));
+      setPortfolioSource("supabase");
+    } catch {
+      setBuildings(getBuildingsByLandlordId(landlord.id));
+      setTenants(MOCK_TENANTS.filter((t) => t.landlordId === landlord.id));
+      setPayouts(getPayoutHistoryForLandlord(landlord.id));
+      setPortfolioSource("mock");
+    }
+  }, [landlord.company, landlord.id, landlord.name]);
+
+  useEffect(() => {
+    void loadPortfolio();
+  }, [loadPortfolio]);
 
   const [tenantPageSize, setTenantPageSize] = useState(5);
   const [tenantPage, setTenantPage] = useState(1);
@@ -177,7 +210,7 @@ export function LandlordDetailView({ landlord }: { landlord: LandlordRow }) {
             {landlord.company}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{landlord.id}</span>
+            <span className="font-medium text-foreground">{landlord.code ?? landlord.id}</span>
             <span className="mx-2 text-border">·</span>
             <span>{landlord.name}</span>
           </p>

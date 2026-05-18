@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   CartesianGrid,
   Line,
@@ -23,6 +23,8 @@ const MONTHLY_COLLECTIONS = [
   { month: "Dec", amount: 284_000 },
 ];
 
+const subscribe = () => () => {};
+
 function kesTick(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
@@ -30,11 +32,7 @@ function kesTick(n: number) {
 }
 
 export function LandlordRevenueLineChart() {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!isMounted) {
     return <div className="h-[260px] min-h-[260px] w-full min-w-0 rounded-md bg-muted/30" aria-hidden />;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   Area,
   AreaChart,
@@ -26,12 +26,10 @@ const DATA = [
   { month: "Dec", value: 85 },
 ];
 
-export function RevenueChart() {
-  const [isMounted, setIsMounted] = useState(false);
+const subscribe = () => () => {};
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+export function RevenueChart() {
+  const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!isMounted) {
     return <div className="h-[280px] min-h-[280px] w-full min-w-0 rounded-md bg-muted/30" aria-hidden />;

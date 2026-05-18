@@ -22,13 +22,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
 import {
-  MOCK_LANDLORDS,
   TABLE_PAGE_SIZE_OPTIONS,
+  type Landlord,
   type PaymentRow,
   type TenantDetail,
+  fetchLandlordForTenant,
+  fetchPaymentsForTenant,
   formatKes,
   getPaymentHistoryForTenant,
 } from "@/lib/tenants-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 function tenantInitials(name: string) {
@@ -62,11 +65,47 @@ function paymentStatusBadge(status: PaymentRow["status"]) {
 }
 
 export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
-  const landlord = MOCK_LANDLORDS.find((l) => l.id === tenant.landlordId);
-  const allPayments = useMemo(
-    () => getPaymentHistoryForTenant(tenant.id),
-    [tenant.id]
+  const [landlord, setLandlord] = useState<Landlord | null>(null);
+  const [allPayments, setAllPayments] = useState<PaymentRow[]>(() =>
+    getPaymentHistoryForTenant(tenant.id),
   );
+  const [relatedSource, setRelatedSource] = useState<"loading" | "mock" | "supabase">(
+    "loading",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRelated() {
+      const supabase = tryGetSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setAllPayments(getPaymentHistoryForTenant(tenant.id));
+          setRelatedSource("mock");
+        }
+        return;
+      }
+      try {
+        const [ll, payments] = await Promise.all([
+          fetchLandlordForTenant(supabase, tenant.landlordId),
+          fetchPaymentsForTenant(supabase, tenant.id),
+        ]);
+        if (!cancelled) {
+          setLandlord(ll);
+          setAllPayments(payments);
+          setRelatedSource("supabase");
+        }
+      } catch {
+        if (!cancelled) {
+          setAllPayments(getPaymentHistoryForTenant(tenant.id));
+          setRelatedSource("mock");
+        }
+      }
+    }
+    void loadRelated();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant.id, tenant.landlordId]);
   const [payPageSize, setPayPageSize] = useState<number>(5);
   const [payPage, setPayPage] = useState(1);
 
@@ -190,6 +229,56 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
                       {tenant.accountOpened}
                     </dd>
                   </div>
+                  {tenant.leaseEndDate ? (
+                    <div>
+                      <dt className="text-xs font-medium text-muted-foreground">
+                        Lease end
+                      </dt>
+                      <dd className="mt-0.5 font-medium text-foreground">
+                        {tenant.leaseEndDate}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {tenant.nationalId ? (
+                    <div>
+                      <dt className="text-xs font-medium text-muted-foreground">
+                        National ID
+                      </dt>
+                      <dd className="mt-0.5 font-medium text-foreground">
+                        {tenant.nationalId}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {tenant.kraPin ? (
+                    <div>
+                      <dt className="text-xs font-medium text-muted-foreground">
+                        KRA PIN
+                      </dt>
+                      <dd className="mt-0.5 font-mono font-medium text-foreground">
+                        {tenant.kraPin}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {tenant.depositAmountPaid != null ? (
+                    <div>
+                      <dt className="text-xs font-medium text-muted-foreground">
+                        Deposit paid
+                      </dt>
+                      <dd className="mt-0.5 font-medium text-foreground">
+                        {formatKes(tenant.depositAmountPaid)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {tenant.secondaryPhones ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs font-medium text-muted-foreground">
+                        Other phones
+                      </dt>
+                      <dd className="mt-0.5 font-medium text-foreground">
+                        {tenant.secondaryPhones}
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
               </div>
             </div>

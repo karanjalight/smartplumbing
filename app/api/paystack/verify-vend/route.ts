@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getLongiConfigFromEnv, longiVendToken, type LongiVendResult } from "@/lib/longi-vending";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/types";
+import { resolveMeterTenantContext } from "@/lib/tokens-data";
 
 type PaystackVerifyResponse = {
   status: boolean;
@@ -115,6 +118,71 @@ export async function POST(request: Request) {
     );
   }
 
+  await persistTokenPurchase({
+    reference,
+    meterNo,
+    amountKes,
+    vend,
+  });
+
   processedReferences.set(reference, vend);
   return NextResponse.json(vend);
+}
+
+async function persistTokenPurchase(input: {
+  reference: string;
+  meterNo: string;
+  amountKes: number;
+  vend: LongiVendResult;
+}) {
+  try {
+    const admin = getSupabaseAdminClient();
+
+    const { data: existing } = await admin
+      .from("token_purchases")
+      .select("id")
+      .eq("payment_ref", input.reference)
+      .maybeSingle();
+
+    if (existing) return;
+
+    const ctx = await resolveMeterTenantContext(admin, input.meterNo);
+    const tokenFormatted = input.vend.token.trim();
+    if (!tokenFormatted) return;
+
+    const { data: inserted, error: insErr } = await admin
+      .from("token_purchases")
+      .insert({
+        tenant_id: ctx.tenantId,
+        meter_id: ctx.meterId,
+        meter_no: input.meterNo,
+        amount_kes: input.amountKes,
+        token_formatted: tokenFormatted,
+        kct_token_1: input.vend.kctToken1 ?? null,
+        kct_token_2: input.vend.kctToken2 ?? null,
+        subsidy_token: input.vend.subsidyToken ?? null,
+        longi_order_no: input.vend.orderNo,
+        longi_credit: input.vend.credit ?? null,
+        longi_raw_payload: input.vend as unknown as Json,
+        source: "app",
+        payment_ref: input.reference,
+        note: null,
+      } as never)
+      .select("id, created_at")
+      .maybeSingle();
+
+    if (insErr || !inserted) return;
+
+    if (ctx.tenantId) {
+      await admin
+        .from("tenants")
+        .update({
+          last_token_at: inserted.created_at,
+          last_token_preview: tokenFormatted,
+        } as never)
+        .eq("id", ctx.tenantId);
+    }
+  } catch {
+    // Vend succeeded; ledger write failure should not block the client response.
+  }
 }

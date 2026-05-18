@@ -14,7 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import {
   Bar,
   BarChart,
@@ -44,6 +44,7 @@ import { readStoredManualPurchases } from "@/lib/tokens-data";
 import { cn } from "@/lib/utils";
 
 const DEMO_AS_OF_LABEL = "Demo data through Apr 2026 · scoped to your portfolio";
+const subscribe = () => () => {};
 
 const TABS = [
   { id: "overview" as const, label: "Overview", Icon: LayoutDashboard, description: "KPIs for your account" },
@@ -68,11 +69,7 @@ export function LandlordReportsView({ landlordId }: { landlordId: string }) {
   const finance = useLandlordFinanceStore();
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const [period, setPeriod] = useState<LandlordReportPeriod>("30d");
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   const bundle = useMemo(() => {
     if (!portfolio || !finance) return null;

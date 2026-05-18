@@ -6,15 +6,17 @@ import Link from "next/link";
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
 
-type HistoryRecord = {
+export type ClientHistoryRecord = {
+  id?: string;
   title: string;
   subtitle: string;
   amount?: string;
   status: "success" | "pending";
   date: string;
+  tokenPreview?: string;
 };
 
-function statusStyle(status: HistoryRecord["status"]) {
+function statusStyle(status: ClientHistoryRecord["status"]) {
   if (status === "success") {
     return "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300";
   }
@@ -28,13 +30,15 @@ export function ClientHistoryView({
   ctaHref,
   ctaLabel,
   records,
+  emptyMessage = "No purchases yet. Buy your first water token to see history here.",
 }: {
   title: string;
   heading: string;
   summary: string;
   ctaHref: string;
   ctaLabel: string;
-  records: HistoryRecord[];
+  records: ClientHistoryRecord[];
+  emptyMessage?: string;
 }) {
   return (
     <main className="min-h-screen bg-white dark:bg-slate-950">
@@ -53,9 +57,14 @@ export function ClientHistoryView({
         </div>
 
         <div className="mt-4 space-y-2.5">
+          {records.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+              {emptyMessage}
+            </p>
+          ) : null}
           {records.map((record) => (
             <article
-              key={`${record.title}-${record.date}`}
+              key={record.id ?? `${record.title}-${record.date}`}
               className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900"
             >
               <div className="flex items-start justify-between gap-3">
@@ -66,6 +75,11 @@ export function ClientHistoryView({
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                     {record.subtitle}
                   </p>
+                  {record.tokenPreview ? (
+                    <p className="mt-2 break-all font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                      {record.tokenPreview}
+                    </p>
+                  ) : null}
                 </div>
                 {record.amount ? (
                   <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">

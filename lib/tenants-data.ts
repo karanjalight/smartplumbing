@@ -1,5 +1,10 @@
 /** Shared mock data for tenants / landlords — aligns with docs (STS prepaid water, M-Pesa, meter types). */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database, TenantRow as DbTenantRow } from "@/lib/supabase/types";
+import { resolveLandlordId } from "@/lib/landlords-data";
+
 export type TenantStatus = "active" | "low_credit" | "inactive" | "overdue";
 
 export type Landlord = {
@@ -12,6 +17,8 @@ export type Landlord = {
 
 export type TenantRow = {
   id: string;
+  /** Display code from Supabase (e.g. TNT-2026-001). */
+  code: string | null;
   name: string;
   phone: string;
   meterId: string;
@@ -32,6 +39,11 @@ export type TenantRow = {
 export type TenantDetailExtras = {
   email: string;
   accountOpened: string;
+  leaseEndDate: string | null;
+  nationalId: string | null;
+  kraPin: string | null;
+  depositAmountPaid: number | null;
+  secondaryPhones: string | null;
   billingModel: "prepaid_sts" | "postpaid";
   addressLine: string;
   city: string;
@@ -96,6 +108,7 @@ export const MOCK_LANDLORDS: Landlord[] = [
 export const MOCK_TENANTS: TenantRow[] = [
   {
     id: "TNT-2026-001",
+    code: "TNT-2026-001",
     name: "Mary Wanjiku",
     phone: "+254 712 345 678",
     meterId: "0159000000640",
@@ -109,6 +122,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-002",
+    code: "TNT-2026-002",
     name: "James Ochieng",
     phone: "+254 733 901 234",
     meterId: "70000003130",
@@ -122,6 +136,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-003",
+    code: "TNT-2026-003",
     name: "Amina Hassan",
     phone: "+254 722 456 789",
     meterId: "0159000000891",
@@ -135,6 +150,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-004",
+    code: "TNT-2026-004",
     name: "Peter Kimani",
     phone: "+254 711 222 333",
     meterId: "0159000001022",
@@ -148,6 +164,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-005",
+    code: "TNT-2026-005",
     name: "Grace Mutua",
     phone: "+254 745 888 999",
     meterId: "70000004501",
@@ -161,6 +178,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-006",
+    code: "TNT-2026-006",
     name: "David Otieno",
     phone: "+254 701 111 222",
     meterId: "0159000000777",
@@ -174,6 +192,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-007",
+    code: "TNT-2026-007",
     name: "Lucy Njeri",
     phone: "+254 799 444 555",
     meterId: "70000005200",
@@ -187,6 +206,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-008",
+    code: "TNT-2026-008",
     name: "Brian Mwangi",
     phone: "+254 788 666 777",
     meterId: "0159000000999",
@@ -200,6 +220,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-009",
+    code: "TNT-2026-009",
     name: "Faith Akinyi",
     phone: "+254 723 000 111",
     meterId: "70000006112",
@@ -213,6 +234,7 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
   {
     id: "TNT-2026-010",
+    code: "TNT-2026-010",
     name: "Kevin Kipchoge",
     phone: "+254 756 321 654",
     meterId: "0159000000555",
@@ -226,9 +248,439 @@ export const MOCK_TENANTS: TenantRow[] = [
   },
 ];
 
+/** Row shape from `public.tenant_directory` (joined landlords, buildings, units, meters). */
+export type TenantDirectoryRow = DbTenantRow & {
+  landlord_code: string | null;
+  landlord_name: string | null;
+  landlord_company: string | null;
+  building_name: string | null;
+  unit_label: string | null;
+  meter_no: string | null;
+};
+
+function formatTenantDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value.includes("T") ? value : `${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString("en-KE", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function mapTenantDirectoryToUiRow(row: TenantDirectoryRow): TenantRow {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.full_name,
+    phone: row.phone?.trim() || "—",
+    meterId: row.meter_no?.trim() || "—",
+    property: row.building_name?.trim() || "—",
+    unit: row.unit_label?.trim() || "—",
+    landlordId: row.landlord_id,
+    balanceKes: Number(row.balance_kes) || 0,
+    lastTokenDate: formatTenantDate(row.last_token_at) ?? "—",
+    lastTokenPreview: row.last_token_preview?.trim() || "—",
+    status: row.status,
+    buildingId: row.building_id,
+    houseUnitId: row.unit_id,
+  };
+}
+
+/** @deprecated Use `mapTenantDirectoryToUiRow` — kept for callers on raw tenant rows. */
+export function mapDbTenantToUiRow(row: DbTenantRow): TenantRow {
+  return mapTenantDirectoryToUiRow({
+    ...row,
+    landlord_code: null,
+    landlord_name: null,
+    landlord_company: null,
+    building_name: null,
+    unit_label: null,
+    meter_no: null,
+  });
+}
+
+/** Mock fallback for admin tenants list when Supabase is unavailable. */
+export function getTenantRows(): TenantRow[] {
+  return MOCK_TENANTS;
+}
+
+export function getLandlordsForTenantFilter(): Landlord[] {
+  return MOCK_LANDLORDS;
+}
+
+function mapDbTenantRecordToUiRow(
+  row: DbTenantRow,
+  lookups: {
+    buildingNames: Map<string, string>;
+    unitLabels: Map<string, string>;
+    meterNos: Map<string, string>;
+  },
+): TenantRow {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.full_name,
+    phone: row.phone?.trim() || "—",
+    meterId: row.meter_id
+      ? lookups.meterNos.get(row.meter_id)?.trim() || "—"
+      : "—",
+    property: row.building_id
+      ? lookups.buildingNames.get(row.building_id)?.trim() || "—"
+      : "—",
+    unit: row.unit_id
+      ? lookups.unitLabels.get(row.unit_id)?.trim() || "—"
+      : "—",
+    landlordId: row.landlord_id,
+    balanceKes: Number(row.balance_kes) || 0,
+    lastTokenDate: formatTenantDate(row.last_token_at) ?? "—",
+    lastTokenPreview: row.last_token_preview?.trim() || "—",
+    status: row.status,
+    buildingId: row.building_id,
+    houseUnitId: row.unit_id,
+  };
+}
+
+function parseUiDateToIso(value: string | null | undefined): string | null {
+  if (!value?.trim() || value.trim() === "—") return null;
+  const parsed = new Date(value.includes("T") ? value : `${value.trim()}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+/** Tenants for one landlord (landlord portal / admin detail). */
+export async function fetchTenantRowsForLandlord(
+  client: SupabaseClient<Database>,
+  landlordIdOrCode: string,
+  options?: { onlyAssignedToBuildings?: boolean },
+): Promise<TenantRow[]> {
+  const landlordId = await resolveLandlordId(client, landlordIdOrCode);
+  if (!landlordId) return [];
+
+  const { data: landlordBuildings, error: buildingsErr } = await client
+    .from("buildings")
+    .select("id")
+    .eq("landlord_id", landlordId);
+
+  if (buildingsErr) throw buildingsErr;
+
+  const landlordBuildingIdSet = new Set((landlordBuildings ?? []).map((b) => b.id));
+
+  const { data: tenants, error } = await client
+    .from("tenants")
+    .select("*")
+    .eq("landlord_id", landlordId)
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  if (!tenants?.length) return [];
+
+  const scopedTenants =
+    options?.onlyAssignedToBuildings === false
+      ? tenants
+      : tenants.filter(
+          (t) =>
+            t.building_id != null && landlordBuildingIdSet.has(t.building_id),
+        );
+
+  if (!scopedTenants.length) return [];
+
+  const tenantBuildingIds = [
+    ...new Set(
+      scopedTenants
+        .map((t) => t.building_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const unitIds = [
+    ...new Set(
+      scopedTenants.map((t) => t.unit_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const meterIds = [
+    ...new Set(
+      scopedTenants.map((t) => t.meter_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const [buildingsRes, unitsRes, metersRes] = await Promise.all([
+    tenantBuildingIds.length > 0
+      ? client.from("buildings").select("id, name").in("id", tenantBuildingIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    unitIds.length > 0
+      ? client.from("units").select("id, label").in("id", unitIds)
+      : Promise.resolve({ data: [] as { id: string; label: string }[] }),
+    meterIds.length > 0
+      ? client.from("meters").select("id, meter_no").in("id", meterIds)
+      : Promise.resolve({ data: [] as { id: string; meter_no: string }[] }),
+  ]);
+
+  const lookups = {
+    buildingNames: new Map(
+      (buildingsRes.data ?? []).map((b) => [b.id, b.name]),
+    ),
+    unitLabels: new Map((unitsRes.data ?? []).map((u) => [u.id, u.label])),
+    meterNos: new Map((metersRes.data ?? []).map((m) => [m.id, m.meter_no])),
+  };
+
+  return scopedTenants.map((row) => mapDbTenantRecordToUiRow(row, lookups));
+}
+
+/** All tenants for admin directory — reads `tenants` + related tables (same pattern as buildings). */
+export async function fetchTenantRows(
+  client: SupabaseClient<Database>,
+): Promise<TenantRow[]> {
+  const { data: tenants, error } = await client
+    .from("tenants")
+    .select("*")
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  if (!tenants?.length) return [];
+
+  const buildingIds = [
+    ...new Set(
+      tenants
+        .map((t) => t.building_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const unitIds = [
+    ...new Set(
+      tenants.map((t) => t.unit_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const meterIds = [
+    ...new Set(
+      tenants.map((t) => t.meter_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const [buildingsRes, unitsRes, metersRes] = await Promise.all([
+    buildingIds.length > 0
+      ? client.from("buildings").select("id, name").in("id", buildingIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    unitIds.length > 0
+      ? client.from("units").select("id, label").in("id", unitIds)
+      : Promise.resolve({ data: [] as { id: string; label: string }[] }),
+    meterIds.length > 0
+      ? client.from("meters").select("id, meter_no").in("id", meterIds)
+      : Promise.resolve({ data: [] as { id: string; meter_no: string }[] }),
+  ]);
+
+  const lookups = {
+    buildingNames: new Map(
+      (buildingsRes.data ?? []).map((b) => [b.id, b.name]),
+    ),
+    unitLabels: new Map((unitsRes.data ?? []).map((u) => [u.id, u.label])),
+    meterNos: new Map((metersRes.data ?? []).map((m) => [m.id, m.meter_no])),
+  };
+
+  return tenants.map((row) => mapDbTenantRecordToUiRow(row, lookups));
+}
+
+/** Landlord options for tenant list filters. */
+export async function fetchLandlordsForTenantFilter(
+  client: SupabaseClient<Database>,
+): Promise<Landlord[]> {
+  const { data, error } = await client
+    .from("landlords")
+    .select("id, full_name, company, phone, email")
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map((l) => ({
+    id: l.id,
+    name: l.full_name,
+    company: l.company?.trim() || "—",
+    phone: l.phone?.trim() || "—",
+    email: l.email?.trim() || "—",
+  }));
+}
+
+function syntheticTenantEmail(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  return `${slug || "tenant"}@tenant.smartone.demo`;
+}
+
+/** Single tenant for admin detail page (Supabase). */
+export async function fetchTenantDetailById(
+  client: SupabaseClient<Database>,
+  id: string,
+): Promise<TenantDetail | null> {
+  const { data: row, error } = await client
+    .from("tenants")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!row) return null;
+
+  const [buildingRes, unitRes, meterRes] = await Promise.all([
+    row.building_id
+      ? client
+          .from("buildings")
+          .select("name, address_line, city")
+          .eq("id", row.building_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    row.unit_id
+      ? client.from("units").select("label").eq("id", row.unit_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    row.meter_id
+      ? client.from("meters").select("meter_no").eq("id", row.meter_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const lookups = {
+    buildingNames: new Map(
+      row.building_id && buildingRes.data?.name
+        ? [[row.building_id, buildingRes.data.name]]
+        : [],
+    ),
+    unitLabels: new Map(
+      row.unit_id && unitRes.data?.label
+        ? [[row.unit_id, unitRes.data.label]]
+        : [],
+    ),
+    meterNos: new Map(
+      row.meter_id && meterRes.data?.meter_no
+        ? [[row.meter_id, meterRes.data.meter_no]]
+        : [],
+    ),
+  };
+
+  const base = mapDbTenantRecordToUiRow(row, lookups);
+  const billingModel: TenantDetailExtras["billingModel"] =
+    row.billing_model === "postpaid" ? "postpaid" : "prepaid_sts";
+
+  return {
+    ...base,
+    email: row.email?.trim() || syntheticTenantEmail(base.name),
+    accountOpened: formatTenantDate(row.account_opened) ?? "—",
+    leaseEndDate: row.lease_end_date
+      ? formatTenantDate(row.lease_end_date)
+      : null,
+    nationalId: row.national_id?.trim() || null,
+    kraPin: row.kra_pin?.trim() || null,
+    depositAmountPaid:
+      row.deposit_amount_paid != null
+        ? Number(row.deposit_amount_paid)
+        : null,
+    secondaryPhones: row.secondary_phones?.trim() || null,
+    billingModel,
+    addressLine:
+      row.address_line?.trim() ||
+      buildingRes.data?.address_line?.trim() ||
+      `${base.property} — ${base.unit}`,
+    city: row.city?.trim() || buildingRes.data?.city?.trim() || "—",
+    region: row.region?.trim() || "—",
+    meterTypeLabel:
+      billingModel === "postpaid"
+        ? "Postpaid water billing"
+        : "Prepayment water (m³) — STS",
+    tariffNote: "Step tariff; vending via LONGi-compatible STS tokens.",
+    lastReadingM3: "—",
+    connectivityStatus: "unknown",
+    leaseNotes:
+      row.lease_notes?.trim() ||
+      "Smart water meter linked for prepaid token credit and automated billing sync per platform policy.",
+  };
+}
+
+/** Landlord row for tenant detail sidebar. */
+export async function fetchLandlordForTenant(
+  client: SupabaseClient<Database>,
+  landlordId: string,
+): Promise<Landlord | null> {
+  const { data, error } = await client
+    .from("landlords")
+    .select("id, full_name, company, phone, email")
+    .eq("id", landlordId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.full_name,
+    company: data.company?.trim() || "—",
+    phone: data.phone?.trim() || "—",
+    email: data.email?.trim() || "—",
+  };
+}
+
+function mapDbPaymentToUiRow(
+  row: import("@/lib/supabase/types").PaymentRow,
+): PaymentRow {
+  const dbMethod = row.method;
+  const uiMethod: PaymentRow["method"] =
+    dbMethod === "Card"
+      ? "Bank"
+      : dbMethod === "M-Pesa" ||
+          dbMethod === "Bank" ||
+          dbMethod === "Cash" ||
+          dbMethod === "STS credit"
+        ? dbMethod
+        : "M-Pesa";
+  const statusMap: Record<string, PaymentRow["status"]> = {
+    completed: "completed",
+    pending: "pending",
+    failed: "failed",
+    refunded: "failed",
+  };
+  const processed = row.processed_at ?? row.created_at;
+  const parsed = processed ? new Date(processed) : null;
+  const date =
+    parsed && !Number.isNaN(parsed.getTime())
+      ? parsed.toLocaleDateString("en-KE", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "—";
+
+  return {
+    id: row.id,
+    date,
+    method: uiMethod,
+    amountKes: Number(row.amount_kes) || 0,
+    reference: row.reference?.trim() || row.provider_reference?.trim() || "—",
+    status: statusMap[row.status] ?? "completed",
+  };
+}
+
+/** Payment history for tenant detail (Supabase). */
+export async function fetchPaymentsForTenant(
+  client: SupabaseClient<Database>,
+  tenantId: string,
+  limit = 48,
+): Promise<PaymentRow[]> {
+  const { data, error } = await client
+    .from("payments")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data ?? []).map(mapDbPaymentToUiRow);
+}
+
 const DEFAULT_EXTRAS: TenantDetailExtras = {
   email: "tenant@example.com",
   accountOpened: "Jan 10, 2025",
+  leaseEndDate: null,
+  nationalId: null,
+  kraPin: null,
+  depositAmountPaid: null,
+  secondaryPhones: null,
   billingModel: "prepaid_sts",
   addressLine: "To be assigned",
   city: "Nairobi",
@@ -262,14 +714,6 @@ export function getTenantById(id: string): TenantDetail | undefined {
   if (!base) return undefined;
   const extra = { ...DEFAULT_EXTRAS, ...TENANT_EXTRAS[id] };
   return { ...base, ...extra };
-}
-
-function syntheticTenantEmail(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "");
-  return `${slug || "tenant"}@tenant.smartone.demo`;
 }
 
 /**
@@ -333,3 +777,5 @@ export function formatKes(n: number) {
 }
 
 export const TABLE_PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100, 200, 500, 1000] as const;
+
+export { parseUiDateToIso };

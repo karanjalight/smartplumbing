@@ -1,0 +1,338 @@
+"use server";
+
+import { randomUUID } from "crypto";
+
+import { z } from "zod";
+
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import type { RecurringBillFrequency, RentModel } from "@/lib/supabase/types";
+
+const unitInput = z.object({
+  label: z.string().min(1, "Each house needs a label."),
+  /** When null and sameRentAll, inherits building rent. */
+  rentKes: z.number().nonnegative().nullable().optional(),
+  /** Optional meter to assign to this unit after creation. */
+  meterId: z.string().uuid().nullable().optional(),
+});
+
+const recurringBillInput = z.object({
+  label: z.string().min(1, "Each recurring bill needs a name."),
+  amountKes: z.number().nonnegative("Amount must be zero or positive."),
+  frequency: z.enum(["monthly", "quarterly", "yearly"] satisfies [
+    RecurringBillFrequency,
+    RecurringBillFrequency,
+    RecurringBillFrequency,
+  ]),
+  notes: z.string().optional().nullable(),
+});
+
+const createInput = z
+  .object({
+    landlordId: z.string().uuid().optional(),
+    name: z.string().min(1, "Building name is required."),
+    addressLine: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+    region: z.string().optional().nullable(),
+    caretakerName: z.string().optional().nullable(),
+    caretakerPhone: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    sameRentAll: z.boolean(),
+    unifiedRentKes: z.number().nonnegative().optional(),
+    /** Optional % of total building income retained as management fee (0–100). */
+    managementFeePct: z.number().min(0).max(100).nullable().optional(),
+    recurringBills: z.array(recurringBillInput).optional(),
+    units: z.array(unitInput).min(1, "Add at least one house."),
+  })
+  .superRefine((data, ctx) => {
+    const labels = data.units.map((u) => u.label.trim().toLowerCase());
+    const dup = labels.find((l, i) => labels.indexOf(l) !== i);
+    if (dup) {
+      ctx.addIssue({
+        code: "custom",
+        message: "House labels must be unique.",
+        path: ["units"],
+      });
+    }
+    if (data.sameRentAll) {
+      if (data.unifiedRentKes === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter the rent amount for all units.",
+          path: ["unifiedRentKes"],
+        });
+      }
+    } else {
+      data.units.forEach((u, i) => {
+        if (u.rentKes === undefined || u.rentKes === null) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Enter rent for each house.",
+            path: ["units", i, "rentKes"],
+          });
+        }
+      });
+    }
+    const meterIds = data.units
+      .map((u) => u.meterId)
+      .filter((id): id is string => Boolean(id));
+    const dupMeter = meterIds.find((id, i) => meterIds.indexOf(id) !== i);
+    if (dupMeter) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Each meter can only be assigned to one house.",
+        path: ["units"],
+      });
+    }
+  });
+
+export type CreateBuildingWithUnitsResult =
+  | { ok: true; buildingId: string }
+  | { ok: false; error: string };
+
+function buildingCode(): string {
+  return `BLD-${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+}
+
+export async function createBuildingWithUnits(
+  input: unknown,
+): Promise<CreateBuildingWithUnitsResult> {
+  const parsed = createInput.safeParse(input);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return { ok: false, error: msg };
+  }
+
+  const data = parsed.data;
+  const supabase = await getSupabaseServerClient();
+
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabase.auth.getUser();
+  if (authErr || !user) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileErr || !profile) {
+    return { ok: false, error: "Could not load your profile." };
+  }
+
+  const role = profile.role;
+  let landlordId: string;
+
+  if (role === "admin") {
+    if (!data.landlordId) {
+      return { ok: false, error: "Select a landlord for this building." };
+    }
+    landlordId = data.landlordId;
+  } else if (role === "landlord") {
+    const { data: landlordRow, error: lhErr } = await supabase
+      .from("landlords")
+      .select("id")
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    if (lhErr || !landlordRow) {
+      return {
+        ok: false,
+        error: "No landlord account is linked to your profile.",
+      };
+    }
+    landlordId = landlordRow.id;
+    if (data.landlordId && data.landlordId !== landlordId) {
+      return { ok: false, error: "Invalid landlord selection." };
+    }
+  } else {
+    return { ok: false, error: "You do not have permission to create buildings." };
+  }
+
+  const rentModel: RentModel = "per_unit";
+  const n = data.units.length;
+  let buildingRentKes = 0;
+  const unified = data.sameRentAll ? (data.unifiedRentKes ?? 0) : null;
+
+  if (data.sameRentAll) {
+    buildingRentKes = unified ?? 0;
+  } else {
+    buildingRentKes = Math.max(
+      0,
+      ...data.units.map((u) => u.rentKes ?? 0),
+    );
+  }
+
+  const code = buildingCode();
+
+  const buildingRow = {
+    code,
+    landlord_id: landlordId,
+    name: data.name.trim(),
+    address_line: data.addressLine?.trim() || null,
+    city: data.city?.trim() || null,
+    region: data.region?.trim() || null,
+    caretaker_name: data.caretakerName?.trim() || null,
+    caretaker_phone: data.caretakerPhone?.trim() || null,
+    house_count: n,
+    meter_count: 0,
+    rent_model: rentModel,
+    rent_kes: buildingRentKes,
+    management_fee_pct:
+      data.managementFeePct != null ? data.managementFeePct : null,
+    notes: data.notes?.trim() || null,
+  };
+
+  const { data: building, error: bErr } = await supabase
+    .from("buildings")
+    .insert(buildingRow as never)
+    .select("id")
+    .single();
+
+  if (bErr || !building) {
+    return {
+      ok: false,
+      error: bErr?.message ?? "Could not create building.",
+    };
+  }
+
+  const buildingId = building.id;
+
+  const unitInserts = data.units.map((u) => ({
+    building_id: buildingId,
+    label: u.label.trim(),
+    description: null as string | null,
+    rent_kes: data.sameRentAll ? null : (u.rentKes ?? null),
+    is_vacant: true,
+  }));
+
+  const { data: insertedUnits, error: uErr } = await supabase
+    .from("units")
+    .insert(unitInserts as never)
+    .select("id, label");
+
+  if (uErr || !insertedUnits) {
+    await supabase.from("buildings").delete().eq("id", buildingId);
+    return { ok: false, error: uErr?.message || "Could not create houses." };
+  }
+
+  const unitIdByLabel = new Map(
+    insertedUnits.map((u) => [u.label.trim().toLowerCase(), u.id]),
+  );
+
+  const meterAssignments = data.units
+    .map((u) => {
+      if (!u.meterId) return null;
+      const unitId = unitIdByLabel.get(u.label.trim().toLowerCase());
+      if (!unitId) return null;
+      return { meterId: u.meterId, unitId };
+    })
+    .filter((a): a is { meterId: string; unitId: string } => a != null);
+
+  if (meterAssignments.length > 0) {
+    for (const { meterId, unitId } of meterAssignments) {
+      const { data: meterRow, error: mFetchErr } = await supabase
+        .from("meters")
+        .select("id, unit_id, landlord_id")
+        .eq("id", meterId)
+        .maybeSingle();
+
+      if (mFetchErr || !meterRow) {
+        await supabase.from("buildings").delete().eq("id", buildingId);
+        return { ok: false, error: "One or more selected meters were not found." };
+      }
+
+      if (meterRow.unit_id) {
+        await supabase.from("buildings").delete().eq("id", buildingId);
+        return {
+          ok: false,
+          error: "A selected meter is already assigned to another unit.",
+        };
+      }
+
+      if (meterRow.landlord_id && meterRow.landlord_id !== landlordId) {
+        await supabase.from("buildings").delete().eq("id", buildingId);
+        return {
+          ok: false,
+          error: "A selected meter belongs to a different landlord.",
+        };
+      }
+
+      const { error: mUpErr } = await supabase
+        .from("meters")
+        .update({
+          landlord_id: landlordId,
+          building_id: buildingId,
+          unit_id: unitId,
+        } as never)
+        .eq("id", meterId);
+
+      if (mUpErr) {
+        await supabase.from("buildings").delete().eq("id", buildingId);
+        return {
+          ok: false,
+          error: mUpErr.message || "Could not assign meter to unit.",
+        };
+      }
+    }
+
+    const { error: mcErr } = await supabase
+      .from("buildings")
+      .update({ meter_count: meterAssignments.length } as never)
+      .eq("id", buildingId);
+
+    if (mcErr) {
+      await supabase.from("buildings").delete().eq("id", buildingId);
+      return {
+        ok: false,
+        error: mcErr.message || "Could not update meter count.",
+      };
+    }
+  }
+
+  const bills = data.recurringBills ?? [];
+  if (bills.length > 0) {
+    const billInserts = bills.map((b) => ({
+      building_id: buildingId,
+      label: b.label.trim(),
+      amount_kes: b.amountKes,
+      frequency: b.frequency,
+      notes: b.notes?.trim() || null,
+      is_active: true,
+    }));
+
+    const { error: rbErr } = await supabase
+      .from("building_recurring_bills")
+      .insert(billInserts as never);
+
+    if (rbErr) {
+      await supabase.from("buildings").delete().eq("id", buildingId);
+      return {
+        ok: false,
+        error: rbErr.message || "Could not save recurring bills.",
+      };
+    }
+  }
+
+  const { error: wErr } = await supabase.from("water_pricing").insert({
+    building_id: buildingId,
+    price_per_unit_kes: 0,
+    unit_definition: "1 m³ prepaid block",
+    standing_charge_kes: 0,
+    min_charge_kes: 0,
+    vat_rate_pct: 16,
+    notes: null,
+  } as never);
+
+  if (wErr) {
+    await supabase.from("buildings").delete().eq("id", buildingId);
+    return {
+      ok: false,
+      error: wErr.message || "Could not add default water pricing.",
+    };
+  }
+
+  return { ok: true, buildingId };
+}

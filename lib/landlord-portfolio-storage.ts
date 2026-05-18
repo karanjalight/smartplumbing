@@ -289,6 +289,7 @@ export function newBuildingId() {
 export function defaultTenantForLandlord(landlordId: string, property: string): TenantRow {
   return {
     id: newTenantId(),
+    code: null,
     name: "",
     phone: "",
     meterId: "",

@@ -1,11 +1,15 @@
 "use client";
 
-import { ArrowLeft, Gauge, Wifi } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Gauge, Loader2, ShieldCheck, Wifi } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  createMeter,
+  validateMeterWithLongi,
+} from "@/app/(dashboard)/dashboard/meters/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -16,19 +20,28 @@ function RequiredMark() {
   return <span className="text-destructive"> *</span>;
 }
 
-function meterIdFromSerial(serial: string) {
-  const digits = serial.replace(/\D/g, "");
-  if (!digits) return "";
-  return digits.slice(0, 13).padStart(13, "0");
-}
+export type OnboardMeterViewProps = {
+  successRedirectHref?: string;
+  cancelHref?: string;
+};
 
-export function OnboardMeterView() {
+export function OnboardMeterView({
+  successRedirectHref = "/dashboard/meters",
+  cancelHref = "/dashboard/meters",
+}: OnboardMeterViewProps = {}) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
+  const [validating, setValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [longiValidated, setLongiValidated] = useState(false);
+  const [longiInfo, setLongiInfo] = useState<{
+    customerName?: string;
+    meterTypeLabel: string;
+    customerAddress?: string;
+  } | null>(null);
 
-  const [serial, setSerial] = useState("");
+  const [supplier, setSupplier] = useState("");
   const [meterId, setMeterId] = useState("");
   const [meterType, setMeterType] = useState<"water_prepay_m3" | "water_prepay_currency" | "postpay">(
     "water_prepay_m3"
@@ -42,8 +55,8 @@ export function OnboardMeterView() {
   const [notes, setNotes] = useState("");
 
   function validate() {
-    if (!serial.trim() || !meterId.trim()) {
-      setError("Serial number and meter ID are required.");
+    if (!supplier.trim() || !meterId.trim()) {
+      setError("Supplier name and meter ID are required.");
       return false;
     }
     if (!/^\d{10,16}$/.test(meterId.trim())) {
@@ -54,15 +67,69 @@ export function OnboardMeterView() {
     return true;
   }
 
-  async function createMeter() {
+  async function handleValidateLongi() {
+    if (!/^\d{10,16}$/.test(meterId.trim())) {
+      setError("Enter a valid meter ID (10–16 digits) before validating with LONGi.");
+      return;
+    }
+    setValidating(true);
+    setError(null);
+    setLongiValidated(false);
+    setLongiInfo(null);
+
+    const result = await validateMeterWithLongi(meterId.trim());
+    setValidating(false);
+
+    if (!result.ok) {
+      setError(result.error);
+      toast.error("LONGi validation failed", { description: result.error });
+      return;
+    }
+
+    setLongiValidated(true);
+    setLongiInfo({
+      customerName: result.customerName,
+      meterTypeLabel: result.meterTypeLabel,
+      customerAddress: result.customerAddress,
+    });
+    setMeterType(result.suggestedModelType);
+    toast.success("Meter validated on LONGi", {
+      description: result.customerName
+        ? `${result.customerName} · ${result.meterTypeLabel}`
+        : result.meterTypeLabel,
+    });
+  }
+
+  async function handleCreateMeter() {
     if (!validate()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
+    setError(null);
+
+    const result = await createMeter({
+      meterNo: meterId.trim(),
+      supplier: supplier.trim(),
+      modelType: meterType,
+      connectivityStatus: connectivity,
+      installedOn: installedOn || undefined,
+      installer: installer || undefined,
+      firmware: firmware || undefined,
+      initialReadingM3: initialReading || undefined,
+      simIccid: simIccid || undefined,
+      notes: notes || undefined,
+    });
+
     setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error);
+      toast.error(result.error);
+      return;
+    }
+
     toast.success("Meter created successfully.", {
       description: "You can assign this meter later from meter or tenant workflows.",
     });
-    router.push("/dashboard/meters");
+    router.push(successRedirectHref);
   }
 
   return (
@@ -74,8 +141,8 @@ export function OnboardMeterView() {
               Onboard meter
             </h1>
             <p className="text-sm text-muted-foreground">
-              One-step flow: create a meter profile quickly, then assign it later if needed.
-              Installation date and technician are optional.
+              Register a meter in Supabase after LONGi validation (login → meter check). Token
+              vending later uses the same flow: transaction ID, then generate token.
             </p>
           </div>
           <div aria-hidden>
@@ -88,7 +155,7 @@ export function OnboardMeterView() {
 
       <div className="mx-auto max-w-3xl rounded-xl bg-card p-6 shadow-sm md:p-8 dark:border dark:border-border/80">
         <Link
-          href="/dashboard/meters"
+          href={cancelHref}
           className={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
             "-ml-2 mb-6 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground"
@@ -107,34 +174,71 @@ export function OnboardMeterView() {
         <FieldGroup className="gap-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="serial">
-                Meter serial number
+              <Label htmlFor="supplier">
+                Supplier / manufacturer
                 <RequiredMark />
               </Label>
               <Input
-                id="serial"
-                value={serial}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSerial(val);
-                  if (!meterId) setMeterId(meterIdFromSerial(val));
-                }}
-                placeholder="e.g. LGM-WTR-2026-00041"
+                id="supplier"
+                value={supplier}
+                onChange={(e) => setSupplier(e.target.value)}
+                placeholder="e.g. LONGi, Kamstrup, Sensus"
                 className="h-11 rounded-lg"
               />
+              <FieldDescription>
+                Vendor or manufacturer name stored on the meter record.
+              </FieldDescription>
             </div>
             <div className="space-y-2">
               <Label htmlFor="meterId">
                 Meter ID
                 <RequiredMark />
               </Label>
-              <Input
-                id="meterId"
-                value={meterId}
-                onChange={(e) => setMeterId(e.target.value)}
-                placeholder="e.g. 0159000000640"
-                className="h-11 rounded-lg font-mono text-sm"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="meterId"
+                  value={meterId}
+                  onChange={(e) => {
+                    setMeterId(e.target.value.replace(/\D/g, "").slice(0, 16));
+                    setLongiValidated(false);
+                    setLongiInfo(null);
+                  }}
+                  placeholder="e.g. 70002602046"
+                  className="h-11 flex-1 rounded-lg font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={validating || loading || meterId.trim().length < 10}
+                  onClick={() => void handleValidateLongi()}
+                  className="h-11 shrink-0 rounded-lg px-3"
+                >
+                  {validating ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="size-4" />
+                  )}
+                  <span className="ml-1.5 hidden sm:inline">Validate</span>
+                </Button>
+              </div>
+              <FieldDescription>
+                Step 1: Validate with LONGi (login + meter validation). Step 2: Save to inventory.
+              </FieldDescription>
+              {longiValidated && longiInfo ? (
+                <div className="flex items-start gap-2 rounded-lg border border-emerald-500/40 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                  <div>
+                    <p className="font-medium">LONGi recognizes this meter</p>
+                    {longiInfo.customerName ? (
+                      <p className="mt-0.5">{longiInfo.customerName}</p>
+                    ) : null}
+                    <p className="mt-0.5 text-emerald-800/90 dark:text-emerald-300/90">
+                      {longiInfo.meterTypeLabel}
+                      {longiInfo.customerAddress ? ` · ${longiInfo.customerAddress}` : ""}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -290,7 +394,7 @@ export function OnboardMeterView() {
             type="button"
             disabled={loading}
             className="h-11 rounded-full bg-[#0A4266] px-8 text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
-            onClick={createMeter}
+            onClick={handleCreateMeter}
           >
             {loading ? "Creating..." : "Create meter"}
           </Button>

@@ -17,22 +17,20 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { notFound, usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
-import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  getLandlordBuildingsMerged,
-  getLandlordTenantsMerged,
-} from "@/lib/landlord-portfolio-storage";
-import { getLandlordRows } from "@/lib/landlords-data";
+import { resolveLandlordId } from "@/lib/landlords-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   TABLE_PAGE_SIZE_OPTIONS,
+  fetchLandlordForTenant,
+  fetchPaymentsForTenant,
+  fetchTenantDetailById,
   formatKes,
-  getPaymentHistoryForTenant,
-  resolveTenantDetailForRow,
+  type Landlord,
   type PaymentRow,
   type TenantDetail,
 } from "@/lib/tenants-data";
@@ -71,15 +69,15 @@ function paymentStatusBadge(status: PaymentRow["status"]) {
 function LandlordTenantDetailBody({
   tenant,
   buildingId,
+  landlord,
+  payments,
 }: {
   tenant: TenantDetail;
   buildingId?: string;
+  landlord: Landlord | null;
+  payments: PaymentRow[];
 }) {
-  const landlord = getLandlordRows().find((l) => l.id === tenant.landlordId);
-  const allPayments = useMemo(
-    () => getPaymentHistoryForTenant(tenant.id),
-    [tenant.id]
-  );
+  const allPayments = payments;
   const [payPageSize, setPayPageSize] = useState<number>(5);
   const [payPage, setPayPage] = useState(1);
 
@@ -503,6 +501,18 @@ function LandlordTenantDetailBody({
   );
 }
 
+type DetailState =
+  | { status: "loading" }
+  | {
+      status: "ready";
+      tenant: TenantDetail;
+      buildingId?: string;
+      landlord: Landlord | null;
+      payments: PaymentRow[];
+    }
+  | { status: "missing" }
+  | { status: "error"; message: string };
+
 export function LandlordTenantDetailPage({
   tenantId,
   landlordId,
@@ -510,26 +520,75 @@ export function LandlordTenantDetailPage({
   tenantId: string;
   landlordId: string;
 }) {
-  const store = useLandlordPortfolioStore();
+  const pathname = usePathname();
+  const [detail, setDetail] = useState<DetailState>({ status: "loading" });
 
-  const { tenant, buildingId } = useMemo(() => {
-    if (!store) return { tenant: undefined as TenantDetail | undefined, buildingId: undefined as string | undefined };
-    const row = getLandlordTenantsMerged(landlordId, store).find((t) => t.id === tenantId);
-    if (!row) return { tenant: undefined, buildingId: undefined };
-    const detail = resolveTenantDetailForRow(row);
-    const bid = getLandlordBuildingsMerged(landlordId, store).find((b) => b.name === row.property)?.id;
-    return { tenant: detail, buildingId: bid };
-  }, [store, landlordId, tenantId]);
+  const loadDetail = useCallback(async () => {
+    setDetail({ status: "loading" });
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setDetail({
+        status: "error",
+        message: "Supabase is not configured.",
+      });
+      return;
+    }
 
-  if (store === null) {
+    try {
+      const scopedLandlordId =
+        (await resolveLandlordId(supabase, landlordId)) ?? landlordId;
+      const tenant = await fetchTenantDetailById(supabase, tenantId);
+      if (!tenant || tenant.landlordId !== scopedLandlordId) {
+        setDetail({ status: "missing" });
+        return;
+      }
+      const [landlord, payments] = await Promise.all([
+        fetchLandlordForTenant(supabase, tenant.landlordId),
+        fetchPaymentsForTenant(supabase, tenantId),
+      ]);
+      setDetail({
+        status: "ready",
+        tenant,
+        buildingId: tenant.buildingId ?? undefined,
+        landlord,
+        payments,
+      });
+    } catch (e) {
+      setDetail({
+        status: "error",
+        message: e instanceof Error ? e.message : "Could not load tenant.",
+      });
+    }
+  }, [landlordId, tenantId]);
+
+  useEffect(() => {
+    void loadDetail();
+  }, [loadDetail, pathname]);
+
+  if (detail.status === "loading") {
     return (
-      <div className="py-16 text-center text-sm text-muted-foreground">Loading tenant…</div>
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        Loading tenant…
+      </div>
     );
   }
 
-  if (!tenant) {
+  if (detail.status === "error") {
+    return (
+      <p className="py-16 text-center text-sm text-destructive">{detail.message}</p>
+    );
+  }
+
+  if (detail.status === "missing") {
     notFound();
   }
 
-  return <LandlordTenantDetailBody tenant={tenant} buildingId={buildingId} />;
+  return (
+    <LandlordTenantDetailBody
+      tenant={detail.tenant}
+      buildingId={detail.buildingId}
+      landlord={detail.landlord}
+      payments={detail.payments}
+    />
+  );
 }

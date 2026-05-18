@@ -215,10 +215,73 @@ export type LongiVendError = {
   errorCode: number;
 };
 
-/** Single vending flow: login -> get order no -> vend token. */
+export type LongiValidateMeterResult =
+  | {
+      ok: true;
+      meterNo: string;
+      meterType?: number;
+      meterTypeLabel: string;
+      customerName?: string;
+      customerAddress?: string;
+      latestVendingDate?: string;
+    }
+  | LongiVendError;
+
+/** Login + GET /validation — used when onboarding a meter. */
+export async function longiValidateMeter(
+  config: LongiConfig,
+  meterNo: string,
+): Promise<LongiValidateMeterResult> {
+  const trimmed = meterNo.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Meter number is required", errorCode: 9002 };
+  }
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0 || !login.sessionId) {
+    return {
+      ok: false,
+      error: login.errorMsg || `LONGi login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  const validation = await longiValidation(config, login.sessionId, trimmed);
+  if (validation.errorCode !== 0) {
+    const msg =
+      validation.errorMsg ||
+      (validation.errorCode === 2002
+        ? "This meter is not registered with LONGi. Check the meter ID."
+        : `Meter validation failed (${validation.errorCode})`);
+    return { ok: false, error: msg, errorCode: validation.errorCode };
+  }
+
+  const meterType =
+    typeof validation.meterType === "number" ? validation.meterType : undefined;
+
+  return {
+    ok: true,
+    meterNo: validation.meterNo ?? trimmed,
+    meterType,
+    meterTypeLabel: meterType != null ? meterTypeLabel(meterType) : "Unknown",
+    customerName: validation.customerName,
+    customerAddress: validation.customerAddress,
+    latestVendingDate: validation.latestVendingDate,
+  };
+}
+
+export function mapLongiMeterTypeToModel(
+  meterType: number | undefined,
+): "water_prepay_m3" | "water_prepay_currency" | "postpay" {
+  if (meterType === -1) return "postpay";
+  if (meterType === 4 || meterType === 5) return "water_prepay_currency";
+  return "water_prepay_m3";
+}
+
+/** Vending flow: login → validation → transaction ID → generate token. */
 export async function longiVendToken(
   config: LongiConfig,
-  params: { meterNo: string; amount: number }
+  params: { meterNo: string; amount: number; skipValidation?: boolean }
 ): Promise<LongiVendResult | LongiVendError> {
   const meterNo = params.meterNo.trim();
   if (!meterNo) return { ok: false, error: "Meter number is required", errorCode: 9002 };
@@ -233,6 +296,18 @@ export async function longiVendToken(
       error: login.errorMsg || `Login failed (${login.errorCode})`,
       errorCode: login.errorCode,
     };
+  }
+
+  if (!params.skipValidation) {
+    const validation = await longiValidation(config, login.sessionId, meterNo);
+    if (validation.errorCode !== 0) {
+      const msg =
+        validation.errorMsg ||
+        (validation.errorCode === 2002
+          ? "Meter not found on LONGi. Validate the meter ID before vending."
+          : `Meter validation failed (${validation.errorCode})`);
+      return { ok: false, error: msg, errorCode: validation.errorCode };
+    }
   }
 
   const order = await longiGetOrderNo(config, login.sessionId);

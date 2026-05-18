@@ -26,10 +26,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/theme-provider";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { TopBarSearch } from "@/components/dashboard/top-bar-search";
 import { Button } from "@/components/ui/button";
+import { useCurrentProfile } from "@/hooks/use-current-profile";
 import { LANDLORD_SEARCH_PAGES } from "@/lib/landlord-search-pages";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 export type TopBarProps = {
@@ -38,14 +41,16 @@ export type TopBarProps = {
   portal?: "admin" | "landlord";
 };
 
-const ADMIN_ACCOUNT = {
-  name: "Tracy Miller",
-  email: "tracy.miller@smartplumbing.co.ke",
+const ADMIN_ACCOUNT_FALLBACK = {
+  name: "Account",
+  email: "",
+  initials: "?",
 };
 
-const LANDLORD_ACCOUNT = {
-  name: "James Mwangi",
-  email: "j.mwangi@property.co.ke",
+const LANDLORD_ACCOUNT_FALLBACK = {
+  name: "Account",
+  email: "",
+  initials: "?",
 };
 
 type NotificationKind =
@@ -173,13 +178,42 @@ const menuItemClass = (state: { disabled: boolean; highlighted: boolean }) =>
 export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
   const router = useRouter();
   const isLandlord = portal === "landlord";
-  const ACCOUNT = isLandlord ? LANDLORD_ACCOUNT : ADMIN_ACCOUNT;
+  const accountFallback = isLandlord
+    ? LANDLORD_ACCOUNT_FALLBACK
+    : ADMIN_ACCOUNT_FALLBACK;
+  const account = useCurrentProfile(accountFallback);
+  const dashboardHref = isLandlord ? "/landlords/dashboard" : "/dashboard";
+  const settingsHref = isLandlord
+    ? "/landlords/dashboard/settings"
+    : "/dashboard/settings";
+  const signInHref = isLandlord ? "/landlords/login" : "/";
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const isDark = resolvedTheme === "dark";
 
   useEffect(() => setMounted(true), []);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const supabase = tryGetSupabaseBrowserClient();
+      if (supabase) {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          toast.error(error.message || "Could not sign out. Try again.");
+          return;
+        }
+      }
+      toast.success("Signed out");
+      router.refresh();
+      router.push(signInHref);
+    } finally {
+      setSigningOut(false);
+    }
+  }
 
   const unreadCount = NOTIFICATIONS.filter((n) => n.unread).length;
 
@@ -407,13 +441,13 @@ export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
               "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A4266] focus-visible:ring-offset-2 dark:focus-visible:ring-[#6BB4E8]",
               "data-[popup-open]:bg-muted"
             )}
-            aria-label={`Account menu for ${ACCOUNT.name}`}
+            aria-label={`Account menu for ${account.name}`}
           >
-            <div className="flex size-9 items-center justify-center rounded-full bg-muted text-foreground">
-              <User className="size-5" aria-hidden />
+            <div className="flex size-9 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
+              {account.initials}
             </div>
             <span className="hidden max-w-32 truncate text-sm font-semibold text-foreground sm:inline">
-              {ACCOUNT.name}
+              {account.name}
             </span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           </Menu.Trigger>
@@ -422,33 +456,27 @@ export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
               <Menu.Popup className={menuPanelClass}>
                 <div className="border-b border-border px-3 py-3">
                   <p className="truncate text-sm font-semibold text-foreground">
-                    {ACCOUNT.name}
+                    {account.name}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {ACCOUNT.email}
-                  </p>
+                  {account.email ? (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {account.email}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="p-1.5">
                   <Menu.Item
                     className={menuItemClass}
-                    onClick={() =>
-                      router.push(
-                        isLandlord ? "/landlords/dashboard" : "/dashboard"
-                      )
-                    }
+                    render={<Link href={dashboardHref} />}
+                    nativeButton={false}
                   >
                     <LayoutGrid className="size-4 text-muted-foreground" aria-hidden />
                     Dashboard
                   </Menu.Item>
                   <Menu.Item
                     className={menuItemClass}
-                    onClick={() =>
-                      router.push(
-                        isLandlord
-                          ? "/landlords/dashboard/settings"
-                          : "/dashboard/settings"
-                      )
-                    }
+                    render={<Link href={settingsHref} />}
+                    nativeButton={false}
                   >
                     <Settings className="size-4 text-muted-foreground" aria-hidden />
                     Settings
@@ -463,12 +491,11 @@ export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
                         "text-destructive focus:text-destructive data-[highlighted]:bg-destructive/10"
                       )
                     }
-                    onClick={() =>
-                      router.push(isLandlord ? "/landlords/login" : "/")
-                    }
+                    disabled={signingOut}
+                    onClick={() => void handleSignOut()}
                   >
                     <LogOut className="size-4 opacity-80" aria-hidden />
-                    Sign out
+                    {signingOut ? "Signing out…" : "Sign out"}
                   </Menu.Item>
                 </div>
               </Menu.Popup>

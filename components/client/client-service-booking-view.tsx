@@ -13,8 +13,11 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { createClientServiceRequest } from "@/app/clients/services/actions";
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
+import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import type { ClientServiceUrgency } from "@/lib/service-requests-data";
 
 const SERVICE_OPTIONS = [
   "Plumbing Repair",
@@ -31,18 +34,26 @@ const SERVICE_OPTIONS = [
   "Emergency Plumbing",
 ] as const;
 
-type ServiceUrgency = "Low" | "Standard" | "Urgent";
-
-export function ClientServiceBookingView() {
+export function ClientServiceBookingView({
+  profile,
+}: {
+  profile: ClientTenantProfile;
+}) {
   const router = useRouter();
+  const defaultArea =
+    profile.tenantId && profile.houseLabel
+      ? `${profile.propertyName} — ${profile.houseLabel}`
+      : "";
+
   const [serviceType, setServiceType] = useState("");
-  const [area, setArea] = useState("");
+  const [area, setArea] = useState(defaultArea);
   const [issueSummary, setIssueSummary] = useState("");
   const [preferredDate, setPreferredDate] = useState("");
-  const [urgency, setUrgency] = useState<ServiceUrgency>("Standard");
+  const [urgency, setUrgency] = useState<ClientServiceUrgency>("Standard");
   const [note, setNote] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
   const [showServicePicker, setShowServicePicker] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const filteredServices = useMemo(() => {
     const query = serviceSearch.trim().toLowerCase();
@@ -50,15 +61,37 @@ export function ClientServiceBookingView() {
     return SERVICE_OPTIONS.filter((service) => service.toLowerCase().includes(query));
   }, [serviceSearch]);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!serviceType || !area.trim() || !issueSummary.trim() || !preferredDate) {
       toast.error("Please complete all required fields");
       return;
     }
 
-    toast.success("Service booking submitted");
+    if (!profile.tenantId) {
+      toast.error("Sign in with your tenant account to book a service.");
+      return;
+    }
+
+    setSubmitting(true);
+    const result = await createClientServiceRequest({
+      serviceType,
+      area: area.trim(),
+      issueSummary: issueSummary.trim(),
+      preferredDate,
+      urgency,
+      note: note.trim() || undefined,
+    });
+    setSubmitting(false);
+
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+
+    toast.success(`Service booking submitted (${result.code})`);
     router.push("/clients/services");
+    router.refresh();
   }
 
   return (
@@ -73,6 +106,15 @@ export function ClientServiceBookingView() {
           <p className="mt-1 text-xs text-white/75">
             Complete the details below to submit your maintenance request.
           </p>
+          {profile.tenantId ? (
+            <p className="mt-3 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white/90">
+              {profile.propertyName} · Unit {profile.houseLabel}
+            </p>
+          ) : (
+            <p className="mt-3 rounded-xl border border-amber-300/40 bg-amber-500/20 px-3 py-2 text-xs text-amber-50">
+              Sign in with a linked tenant account to save bookings to your unit.
+            </p>
+          )}
           <Link
             href="/clients/services"
             className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-white/85"
@@ -113,7 +155,8 @@ export function ClientServiceBookingView() {
                       setShowServicePicker(true);
                     }}
                     placeholder="Search and select a service"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 pr-9 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    disabled={submitting}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 pr-9 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   />
                   <ChevronDown
                     className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-500"
@@ -168,7 +211,8 @@ export function ClientServiceBookingView() {
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
                   placeholder="e.g. Kitchen, Bathroom, Block A Unit 12"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  disabled={submitting}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
 
@@ -185,7 +229,8 @@ export function ClientServiceBookingView() {
                   value={issueSummary}
                   onChange={(e) => setIssueSummary(e.target.value)}
                   placeholder="e.g. Pipe under sink leaking heavily"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  disabled={submitting}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
 
@@ -202,7 +247,8 @@ export function ClientServiceBookingView() {
                     type="date"
                     value={preferredDate}
                     onChange={(e) => setPreferredDate(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    disabled={submitting}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 focus:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -215,8 +261,9 @@ export function ClientServiceBookingView() {
                   <select
                     id="urgency"
                     value={urgency}
-                    onChange={(e) => setUrgency(e.target.value as ServiceUrgency)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    onChange={(e) => setUrgency(e.target.value as ClientServiceUrgency)}
+                    disabled={submitting}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 focus:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   >
                     <option value="Low">Low</option>
                     <option value="Standard">Standard</option>
@@ -238,16 +285,18 @@ export function ClientServiceBookingView() {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Share more context for the operations team..."
-                  className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  disabled={submitting}
+                  className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#2147f4]/25 placeholder:text-slate-400 focus:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
 
               <button
                 type="submit"
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#0A4266] text-sm font-semibold text-white shadow-lg shadow-[#0A4266]/30 transition hover:bg-[#083d5c]"
+                disabled={submitting || !profile.tenantId}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#0A4266] text-sm font-semibold text-white shadow-lg shadow-[#0A4266]/30 transition hover:bg-[#083d5c] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle2 className="size-4" aria-hidden />
-                Book service request
+                {submitting ? "Submitting…" : "Book service request"}
               </button>
             </form>
           </section>

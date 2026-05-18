@@ -3,14 +3,68 @@
  * multiple properties, tenant billing, payouts, contracts, alerts (meter / payment / leaks).
  */
 
-import { MOCK_LANDLORDS, MOCK_TENANTS, formatKes } from "@/lib/tenants-data";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type LandlordStatus = "active" | "pending_verification" | "suspended";
+import type {
+  Database,
+  LandlordRow as DbLandlordRow,
+  PayoutRow as DbPayoutRow,
+} from "@/lib/supabase/types";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value.trim());
+}
+
+/** Resolve a landlord row id from UUID or display code (e.g. LND-001). */
+export async function resolveLandlordId(
+  client: SupabaseClient<Database>,
+  idOrCode: string,
+): Promise<string | null> {
+  const trimmed = idOrCode.trim();
+  if (!trimmed) return null;
+
+  if (isUuid(trimmed)) {
+    const { data, error } = await client
+      .from("landlords")
+      .select("id")
+      .eq("id", trimmed)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.id ?? null;
+  }
+
+  const { data, error } = await client
+    .from("landlords")
+    .select("id")
+    .eq("code", trimmed)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+import { listPayouts } from "@/lib/supabase/queries";
+import {
+  MOCK_LANDLORDS,
+  MOCK_TENANTS,
+  formatKes,
+  fetchTenantRows,
+  type TenantRow as UiTenantRow,
+} from "@/lib/tenants-data";
+
+export type LandlordStatus =
+  | "active"
+  | "pending_verification"
+  | "suspended"
+  | "inactive";
 
 export type PayoutSchedule = "monthly" | "biweekly";
 
 export type LandlordRow = {
   id: string;
+  /** Human-readable code from Supabase (e.g. LND-001). */
+  code: string | null;
   name: string;
   company: string;
   phone: string;
@@ -28,6 +82,12 @@ export type LandlordRow = {
   propertiesCount: number;
   tenantsCount: number;
   /** STS meters linked to tenant units under this landlord. */
+  linkedMetersCount: number;
+};
+
+export type LandlordPortfolioCounts = {
+  propertiesCount: number;
+  tenantsCount: number;
   linkedMetersCount: number;
 };
 
@@ -121,6 +181,179 @@ function landlordHashSeed(id: string): number {
 }
 
 /** Deterministic mock payout history for admin landlord detail. */
+function formatLandlordDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value.includes("T") ? value : `${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString("en-KE", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function normalizeLandlordStatus(status: string): LandlordStatus {
+  if (
+    status === "active" ||
+    status === "pending_verification" ||
+    status === "suspended" ||
+    status === "inactive"
+  ) {
+    return status;
+  }
+  return "pending_verification";
+}
+
+/** Map `public.landlords` row to the admin dashboard `LandlordRow` shape. */
+export function mapDbLandlordToUiRow(
+  db: DbLandlordRow,
+  counts: LandlordPortfolioCounts,
+): LandlordRow {
+  return {
+    id: db.id,
+    code: db.code,
+    name: db.full_name,
+    company: db.company,
+    phone: db.phone?.trim() || "—",
+    email: db.email?.trim() || "—",
+    region: db.region?.trim() || "—",
+    accountOpened: formatLandlordDate(db.account_opened) ?? "—",
+    payoutSchedule: db.payout_schedule,
+    monthlyCollectionKes: Number(db.monthly_collection_kes) || 0,
+    lastPayoutDate: formatLandlordDate(db.last_payout_at),
+    nextPayoutDate: formatLandlordDate(db.next_payout_at) ?? "—",
+    openAlertsCount: db.open_alerts_count ?? 0,
+    status: normalizeLandlordStatus(db.status),
+    propertiesCount: counts.propertiesCount,
+    tenantsCount: counts.tenantsCount,
+    linkedMetersCount: counts.linkedMetersCount,
+  };
+}
+
+async function aggregateLandlordPortfolioCounts(
+  client: SupabaseClient<Database>,
+): Promise<Map<string, LandlordPortfolioCounts>> {
+  const counts = new Map<string, LandlordPortfolioCounts>();
+
+  const { data: buildings, error: buildingsErr } = await client
+    .from("buildings")
+    .select("landlord_id");
+
+  if (buildingsErr) throw buildingsErr;
+
+  for (const row of buildings ?? []) {
+    const current = counts.get(row.landlord_id) ?? {
+      propertiesCount: 0,
+      tenantsCount: 0,
+      linkedMetersCount: 0,
+    };
+    current.propertiesCount += 1;
+    counts.set(row.landlord_id, current);
+  }
+
+  const { data: tenants, error: tenantsErr } = await client
+    .from("tenants")
+    .select("landlord_id, meter_id");
+
+  if (tenantsErr) throw tenantsErr;
+
+  for (const row of tenants ?? []) {
+    const current = counts.get(row.landlord_id) ?? {
+      propertiesCount: 0,
+      tenantsCount: 0,
+      linkedMetersCount: 0,
+    };
+    current.tenantsCount += 1;
+    if (row.meter_id) current.linkedMetersCount += 1;
+    counts.set(row.landlord_id, current);
+  }
+
+  return counts;
+}
+
+/** Load landlord directory rows from Supabase (admin RLS). */
+export async function fetchLandlordRows(
+  client: SupabaseClient<Database>,
+): Promise<LandlordRow[]> {
+  const { data: landlords, error } = await client
+    .from("landlords")
+    .select("*")
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  if (!landlords?.length) return [];
+
+  const countsByLandlord = await aggregateLandlordPortfolioCounts(client);
+
+  return landlords.map((landlord) =>
+    mapDbLandlordToUiRow(
+      landlord,
+      countsByLandlord.get(landlord.id) ?? {
+        propertiesCount: 0,
+        tenantsCount: 0,
+        linkedMetersCount: 0,
+      },
+    ),
+  );
+}
+
+function mapDbPayoutToUiRow(row: DbPayoutRow): LandlordPayoutRow {
+  const status: LandlordPayoutRow["status"] =
+    row.status === "completed" || row.status === "pending" || row.status === "failed"
+      ? row.status
+      : "pending";
+
+  return {
+    id: row.id,
+    date: formatLandlordDate(row.paid_at ?? row.scheduled_at) ?? "—",
+    amountKes: Number(row.net_payout_kes) || 0,
+    reference: row.reference?.trim() || "—",
+    status,
+  };
+}
+
+/** Tenants assigned to a landlord (admin detail or landlord portal). */
+export async function fetchTenantsForLandlord(
+  client: SupabaseClient<Database>,
+  landlordIdOrCode: string,
+): Promise<UiTenantRow[]> {
+  const { fetchTenantRowsForLandlord } = await import("@/lib/tenants-data");
+  return fetchTenantRowsForLandlord(client, landlordIdOrCode);
+}
+
+/** Payout history for admin landlord detail. */
+export async function fetchPayoutHistoryForLandlord(
+  client: SupabaseClient<Database>,
+  landlordId: string,
+): Promise<LandlordPayoutRow[]> {
+  const rows = await listPayouts(client, { landlordId, limit: 24 });
+  return rows.map(mapDbPayoutToUiRow);
+}
+
+export async function fetchLandlordRowById(
+  client: SupabaseClient<Database>,
+  id: string,
+): Promise<LandlordRow | null> {
+  const { data: landlord, error } = await client
+    .from("landlords")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!landlord) return null;
+
+  const countsByLandlord = await aggregateLandlordPortfolioCounts(client);
+  return mapDbLandlordToUiRow(
+    landlord,
+    countsByLandlord.get(landlord.id) ?? {
+      propertiesCount: 0,
+      tenantsCount: 0,
+      linkedMetersCount: 0,
+    },
+  );
+}
+
 export function getPayoutHistoryForLandlord(landlordId: string): LandlordPayoutRow[] {
   const seed = landlordHashSeed(landlordId);
   const rows: LandlordPayoutRow[] = [];
@@ -150,6 +383,7 @@ export function getLandlordRows(): LandlordRow[] {
     const meta = LANDLORD_META[l.id] ?? DEFAULT_META;
     return {
       id: l.id,
+      code: l.id,
       name: l.name,
       company: l.company,
       phone: l.phone,

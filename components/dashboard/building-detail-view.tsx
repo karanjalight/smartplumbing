@@ -10,7 +10,8 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { LandlordAddHouseModal } from "@/components/landlord/landlord-add-house-modal";
 import { LandlordCaretakerModal } from "@/components/landlord/landlord-caretaker-modal";
@@ -21,7 +22,9 @@ import {
   getBuildingById,
   getBuildingListDisplay,
   getHousesForBuilding,
+  loadBuildingDetailFromSupabase,
   rentSummary,
+  type BuildingDetailDbBundle,
   type BuildingListRow,
   type HouseUnitRow,
 } from "@/lib/buildings-data";
@@ -29,51 +32,170 @@ import {
   getLandlordBuildingMerged,
   getLandlordTenantsMerged,
   getMergedHousesForBuildingWithTenantAssignments,
+  readStore,
 } from "@/lib/landlord-portfolio-storage";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+
+function formatBuildingAddress(b: BuildingListRow): string {
+  const parts = [b.addressLine?.trim(), b.city?.trim()].filter(Boolean);
+  return parts.length > 0 ? parts.join(", ") : "—";
+}
+
+type DetailState =
+  | { status: "loading" }
+  | { status: "notfound" }
+  | { status: "error"; message: string }
+  | {
+      status: "ready";
+      source: "database";
+      building: BuildingListRow;
+      landlordCompany: string;
+      houses: HouseUnitRow[];
+      buildingCode: string | null;
+    }
+  | {
+      status: "ready";
+      source: "local";
+      building: BuildingListRow;
+      landlordCompany: string;
+      houses: HouseUnitRow[];
+    };
 
 export type BuildingDetailViewProps = {
   buildingId: string;
   /** Landlord portal: resolve building from merged localStorage + mock seed. */
   portal?: "admin" | "landlord";
   landlordPortalId?: string;
+  /** Server-prefetched Supabase bundle — avoids loading flash on first paint. */
+  initialDetail?: BuildingDetailDbBundle | null;
 };
+
+function detailFromBundle(bundle: BuildingDetailDbBundle): DetailState {
+  return {
+    status: "ready",
+    source: "database",
+    building: bundle.building,
+    landlordCompany: bundle.landlordCompany,
+    houses: bundle.houses,
+    buildingCode: bundle.buildingCode,
+  };
+}
 
 export function BuildingDetailView({
   buildingId,
   portal = "admin",
   landlordPortalId,
+  initialDetail,
 }: BuildingDetailViewProps) {
+  const pathname = usePathname();
   const portfolio = useLandlordPortfolioStore();
-  const building = useMemo((): BuildingListRow | undefined => {
-    if (portal === "landlord" && landlordPortalId && portfolio) {
-      return getLandlordBuildingMerged(landlordPortalId, buildingId, portfolio);
+  const [detail, setDetail] = useState<DetailState>(() =>
+    initialDetail ? detailFromBundle(initialDetail) : { status: "loading" },
+  );
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const isRetry = reloadKey > 0;
+    if (isRetry) {
+      setDetail({ status: "loading" });
     }
-    return getBuildingById(buildingId);
-  }, [portal, landlordPortalId, buildingId, portfolio]);
+
+    async function resolve() {
+      try {
+      const supabase = tryGetSupabaseBrowserClient();
+      if (supabase) {
+        const bundle = await loadBuildingDetailFromSupabase(supabase, {
+          buildingId,
+          landlordId: portal === "landlord" ? landlordPortalId : null,
+        });
+        if (cancelled) return;
+        if (bundle) {
+          setDetail({
+            status: "ready",
+            source: "database",
+            building: bundle.building,
+            landlordCompany: bundle.landlordCompany,
+            houses: bundle.houses,
+            buildingCode: bundle.buildingCode,
+          });
+          return;
+        }
+      }
+
+      const mockB = getBuildingById(buildingId);
+      if (mockB) {
+        if (cancelled) return;
+        const d = getBuildingListDisplay(mockB);
+        setDetail({
+          status: "ready",
+          source: "local",
+          building: mockB,
+          landlordCompany: d.landlordCompany,
+          houses: getHousesForBuilding(mockB),
+        });
+        return;
+      }
+
+      if (portal === "landlord" && landlordPortalId) {
+        const store = readStore();
+        const lb = getLandlordBuildingMerged(landlordPortalId, buildingId, store);
+        if (lb) {
+          if (cancelled) return;
+          const tenants = getLandlordTenantsMerged(landlordPortalId, store);
+          const houses = getMergedHousesForBuildingWithTenantAssignments(
+            lb,
+            store,
+            tenants,
+          );
+          const d = getBuildingListDisplay(lb);
+          setDetail({
+            status: "ready",
+            source: "local",
+            building: lb,
+            landlordCompany: d.landlordCompany,
+            houses,
+          });
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        setDetail({ status: "notfound" });
+      }
+      } catch (e) {
+        if (!cancelled) {
+          setDetail({
+            status: "error",
+            message:
+              e instanceof Error ? e.message : "Could not load this building.",
+          });
+        }
+      }
+    }
+
+    void resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [buildingId, portal, landlordPortalId, pathname, portfolio, reloadKey]);
 
   const [unitQuery, setUnitQuery] = useState("");
   const [caretakerOpen, setCaretakerOpen] = useState(false);
   const [addHouseOpen, setAddHouseOpen] = useState(false);
 
-  const display = building ? getBuildingListDisplay(building) : undefined;
-
-  const landlordTenantsForHouses = useMemo(() => {
-    if (!portfolio || portal !== "landlord" || !landlordPortalId) return [];
-    return getLandlordTenantsMerged(landlordPortalId, portfolio);
-  }, [portfolio, portal, landlordPortalId]);
-
-  const houses = useMemo((): HouseUnitRow[] => {
-    if (!building) return [];
-    if (portal === "landlord" && portfolio && landlordPortalId) {
-      return getMergedHousesForBuildingWithTenantAssignments(
-        building,
-        portfolio,
-        landlordTenantsForHouses
-      );
-    }
-    return getHousesForBuilding(building);
-  }, [building, portal, portfolio, landlordPortalId, landlordTenantsForHouses]);
+  const building = detail.status === "ready" ? detail.building : undefined;
+  const houses = detail.status === "ready" ? detail.houses : [];
+  const display =
+    detail.status === "ready"
+      ? { landlordCompany: detail.landlordCompany }
+      : undefined;
+  const isLiveDetail = detail.status === "ready" && detail.source === "database";
+  const buildingCode =
+    detail.status === "ready" && detail.source === "database"
+      ? detail.buildingCode
+      : null;
 
   const filteredHouses = useMemo(() => {
     const s = unitQuery.trim().toLowerCase();
@@ -83,7 +205,7 @@ export function BuildingDetailView({
         h.label.toLowerCase().includes(s) ||
         (h.tenantName && h.tenantName.toLowerCase().includes(s)) ||
         (h.meterId && h.meterId.toLowerCase().includes(s)) ||
-        (h.description && h.description.toLowerCase().includes(s))
+        (h.description && h.description.toLowerCase().includes(s)),
     );
   }, [houses, unitQuery]);
 
@@ -97,23 +219,54 @@ export function BuildingDetailView({
     return "—";
   }
 
-  if (portal === "landlord" && landlordPortalId && portfolio === null) {
+  const buildingsListHref =
+    portal === "landlord" ? "/landlords/dashboard/buildings" : "/dashboard/buildings";
+
+  if (detail.status === "loading") {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">Loading building…</div>
     );
   }
 
-  const buildingsListHref =
-    portal === "landlord" ? "/landlords/dashboard/buildings" : "/dashboard/buildings";
-
-  if (!building || !display) {
+  if (detail.status === "error") {
     return (
       <div className="space-y-6 pb-10">
         <Link
           href={buildingsListHref}
           className={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
-            "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground"
+            "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <ArrowLeft className="size-4" />
+          Back to buildings
+        </Link>
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-10 text-center dark:border-destructive/40">
+          <p className="text-sm text-destructive">{detail.message}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-6 rounded-full"
+            onClick={() => {
+              setDetail({ status: "loading" });
+              setReloadKey((k) => k + 1);
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (detail.status === "notfound" || !building || !display) {
+    return (
+      <div className="space-y-6 pb-10">
+        <Link
+          href={buildingsListHref}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground",
           )}
         >
           <ArrowLeft className="size-4" />
@@ -137,13 +290,16 @@ export function BuildingDetailView({
   const tenantHrefBase =
     portal === "landlord" ? "/landlords/dashboard/tenants" : "/dashboard/tenants";
 
+  const showLandlordLocalActions =
+    portal === "landlord" && landlordPortalId && !isLiveDetail;
+
   return (
     <div className="space-y-8 pb-10">
       <Link
         href={buildingsListHref}
         className={cn(
           buttonVariants({ variant: "ghost", size: "sm" }),
-          "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground"
+          "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground",
         )}
       >
         <ArrowLeft className="size-4" />
@@ -158,9 +314,15 @@ export function BuildingDetailView({
                 <Building2 className="size-6" />
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {building.id}
-                </p>
+                {buildingCode ? (
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {buildingCode}
+                  </p>
+                ) : isLiveDetail ? null : (
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {building.id}
+                  </p>
+                )}
                 <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
                   {building.name}
                 </h1>
@@ -168,7 +330,7 @@ export function BuildingDetailView({
             </div>
             <p className="flex items-start gap-2 text-sm text-muted-foreground">
               <MapPin className="mt-0.5 size-4 shrink-0" />
-              {building.addressLine}, {building.city}
+              {formatBuildingAddress(building)}
             </p>
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full bg-background/80 px-3 py-1 text-xs font-semibold shadow-sm dark:bg-background/40">
@@ -213,7 +375,7 @@ export function BuildingDetailView({
                   <UserRound className="size-3.5" />
                   Caretaker / manager
                 </p>
-                {portal === "landlord" && landlordPortalId && (
+                {showLandlordLocalActions && (
                   <Button
                     type="button"
                     variant="outline"
@@ -239,7 +401,7 @@ export function BuildingDetailView({
             <h2 className="text-lg font-semibold text-foreground">Houses & units</h2>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            {portal === "landlord" && landlordPortalId && building && (
+            {showLandlordLocalActions && (
               <Button
                 type="button"
                 className="rounded-full gap-2 bg-[#0A4266] text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
@@ -264,9 +426,7 @@ export function BuildingDetailView({
             <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-border/80">
               <tr>
                 <th className="px-4 py-3">Unit</th>
-                {portal === "landlord" && (
-                  <th className="hidden px-4 py-3 sm:table-cell">Rent / mo</th>
-                )}
+                <th className="px-4 py-3">Rent / mo</th>
                 <th className="hidden px-4 py-3 md:table-cell">Tenant</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Meter (STS)</th>
                 <th className="px-4 py-3">Notes</th>
@@ -279,22 +439,23 @@ export function BuildingDetailView({
                   className="bg-card transition-colors hover:bg-muted/30 dark:hover:bg-muted/15"
                 >
                   <td className="px-4 py-3 font-medium text-foreground">{h.label}</td>
-                  {portal === "landlord" && (
-                    <td className="hidden px-4 py-3 tabular-nums text-foreground sm:table-cell">
-                      {unitRentDisplay(h)}
-                    </td>
-                  )}
+                  <td className="px-4 py-3 tabular-nums text-foreground">
+                    {unitRentDisplay(h)}
+                  </td>
                   <td className="hidden px-4 py-3 md:table-cell">
                     {h.tenantId && h.tenantName ? (
                       <Link
-                        href={
-                          portal === "landlord"
-                            ? `${tenantHrefBase}?highlight=${encodeURIComponent(h.tenantId)}`
-                            : `${tenantHrefBase}/${encodeURIComponent(h.tenantId)}`
-                        }
+                        href={`${tenantHrefBase}/${encodeURIComponent(h.tenantId)}`}
                         className="font-medium text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
                       >
                         {h.tenantName}
+                      </Link>
+                    ) : portal === "landlord" ? (
+                      <Link
+                        href={`/landlords/dashboard/tenants/new?buildingId=${encodeURIComponent(buildingId)}&unitId=${encodeURIComponent(h.id)}`}
+                        className="font-medium text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
+                      >
+                        Add tenant
                       </Link>
                     ) : (
                       <span className="text-muted-foreground">Vacant</span>
@@ -321,24 +482,26 @@ export function BuildingDetailView({
 
         {filteredHouses.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No units match your filter.
+            {houses.length === 0
+              ? "No units are recorded for this building yet."
+              : "No units match your filter."}
           </p>
         )}
       </section>
 
-      {portal === "landlord" && landlordPortalId && building && (
+      {showLandlordLocalActions && (
         <>
           <LandlordCaretakerModal
             open={caretakerOpen}
             onClose={() => setCaretakerOpen(false)}
             building={building}
-            landlordId={landlordPortalId}
+            landlordId={landlordPortalId!}
           />
           <LandlordAddHouseModal
             open={addHouseOpen}
             onClose={() => setAddHouseOpen(false)}
             building={building}
-            landlordId={landlordPortalId}
+            landlordId={landlordPortalId!}
           />
         </>
       )}

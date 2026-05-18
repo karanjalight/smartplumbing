@@ -2,6 +2,10 @@
  * STS token purchases (ledger) + manual issuance helpers — aligned to LONGi vending / PROJECT_PROPOSAL.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { listTokenPurchases } from "@/lib/supabase/queries";
+import type { Database, TokenPurchaseRow as DbTokenPurchaseRow } from "@/lib/supabase/types";
 import { MOCK_TENANTS } from "@/lib/tenants-data";
 
 export type ManualTokenChannel = "office" | "call_center" | "field";
@@ -127,6 +131,186 @@ export function appendStoredManualPurchase(row: TokenPurchaseRow): void {
 export function notifyTokenPurchasesUpdated(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event("smartone-tokens-updated"));
+}
+
+export type MeterTenantContext = {
+  tenantId: string | null;
+  meterId: string | null;
+  tenantLandlordId: string | null;
+  meterLandlordId: string | null;
+  name: string | null;
+  property: string | null;
+  unit: string | null;
+};
+
+type TenantLedgerContext = {
+  full_name: string;
+  property: string | null;
+};
+
+function formatPurchaseTimestamp(iso: string): string {
+  return new Date(iso).toISOString().replace("T", " ").slice(0, 19);
+}
+
+/** Map `token_purchases` row to dashboard ledger shape. */
+export function mapDbTokenPurchaseToUiRow(
+  row: DbTokenPurchaseRow,
+  tenant?: TenantLedgerContext | null,
+): TokenPurchaseRow {
+  return {
+    id: row.id,
+    createdAt: formatPurchaseTimestamp(row.created_at),
+    meterNo: row.meter_no,
+    amountKes: Number(row.amount_kes),
+    tokenFormatted: row.token_formatted,
+    tenantName: tenant?.full_name ?? null,
+    property: tenant?.property ?? null,
+    orderNo: row.longi_order_no ?? row.id.slice(0, 8).toUpperCase(),
+    source: row.source,
+    channel: row.manual_channel ?? undefined,
+    note: row.note,
+    paymentRef: row.payment_ref,
+  };
+}
+
+async function fetchTenantLedgerContexts(
+  client: SupabaseClient<Database>,
+  tenantIds: string[],
+): Promise<Map<string, TenantLedgerContext>> {
+  const map = new Map<string, TenantLedgerContext>();
+  if (tenantIds.length === 0) return map;
+
+  const { data: tenants, error } = await client
+    .from("tenants")
+    .select("id, full_name, building_id")
+    .in("id", tenantIds);
+  if (error) throw error;
+
+  const buildingIds = [
+    ...new Set(
+      (tenants ?? [])
+        .map((t) => t.building_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const buildingNames = new Map<string, string>();
+  if (buildingIds.length > 0) {
+    const { data: buildings, error: bErr } = await client
+      .from("buildings")
+      .select("id, name")
+      .in("id", buildingIds);
+    if (bErr) throw bErr;
+    for (const b of buildings ?? []) {
+      buildingNames.set(b.id, b.name);
+    }
+  }
+
+  for (const t of tenants ?? []) {
+    map.set(t.id, {
+      full_name: t.full_name,
+      property: t.building_id ? buildingNames.get(t.building_id) ?? null : null,
+    });
+  }
+  return map;
+}
+
+/** Admin tokens ledger from Supabase. */
+export async function fetchTokenPurchaseRows(
+  client: SupabaseClient<Database>,
+  opts: { limit?: number } = {},
+): Promise<TokenPurchaseRow[]> {
+  const rows = await listTokenPurchases(client, opts);
+  const tenantIds = [
+    ...new Set(rows.map((r) => r.tenant_id).filter((id): id is string => Boolean(id))),
+  ];
+  const tenantMap = await fetchTenantLedgerContexts(client, tenantIds);
+  return rows.map((row) =>
+    mapDbTokenPurchaseToUiRow(row, row.tenant_id ? tenantMap.get(row.tenant_id) : null),
+  );
+}
+
+/** Resolve meter + tenant for vending UI and authorization. */
+export async function resolveMeterTenantContext(
+  client: SupabaseClient<Database>,
+  meterNo: string,
+): Promise<MeterTenantContext> {
+  const trimmed = meterNo.trim();
+  const empty: MeterTenantContext = {
+    tenantId: null,
+    meterId: null,
+    tenantLandlordId: null,
+    meterLandlordId: null,
+    name: null,
+    property: null,
+    unit: null,
+  };
+  if (!trimmed) return empty;
+
+  const { data: meter } = await client
+    .from("meters")
+    .select("id, landlord_id")
+    .eq("meter_no", trimmed)
+    .maybeSingle();
+
+  if (!meter) return empty;
+
+  const { data: tenant } = await client
+    .from("tenants")
+    .select("id, full_name, landlord_id, building_id, unit_id")
+    .eq("meter_id", meter.id)
+    .maybeSingle();
+
+  let property: string | null = null;
+  let unit: string | null = null;
+
+  if (tenant?.building_id) {
+    const { data: building } = await client
+      .from("buildings")
+      .select("name")
+      .eq("id", tenant.building_id)
+      .maybeSingle();
+    property = building?.name ?? null;
+  }
+
+  if (tenant?.unit_id) {
+    const { data: unitRow } = await client
+      .from("units")
+      .select("label")
+      .eq("id", tenant.unit_id)
+      .maybeSingle();
+    unit = unitRow?.label ?? null;
+  }
+
+  return {
+    tenantId: tenant?.id ?? null,
+    meterId: meter.id,
+    tenantLandlordId: tenant?.landlord_id ?? null,
+    meterLandlordId: meter.landlord_id,
+    name: tenant?.full_name ?? null,
+    property,
+    unit,
+  };
+}
+
+/** Client-side meter lookup (Supabase), with mock fallback for offline demos. */
+export async function fetchTenantContextByMeter(
+  client: SupabaseClient<Database>,
+  meterNo: string,
+): Promise<{
+  tenantId: string;
+  name: string;
+  property: string;
+  unit: string;
+} | null> {
+  const ctx = await resolveMeterTenantContext(client, meterNo);
+  if (!ctx.tenantId || !ctx.name) return null;
+  return {
+    tenantId: ctx.tenantId,
+    name: ctx.name,
+    property: ctx.property ?? "—",
+    unit: ctx.unit ?? "—",
+  };
 }
 
 export function findTenantContextByMeter(meterNo: string) {

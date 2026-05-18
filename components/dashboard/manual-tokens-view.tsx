@@ -2,21 +2,22 @@
 
 import { Building2, Copy, KeyRound, Ticket, UserRound } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { issueManualToken } from "@/app/(dashboard)/dashboard/tokens/actions";
+import { MeterSearchSelect } from "@/components/dashboard/meter-search-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { MeterRow } from "@/lib/meters-data";
 import {
-  appendStoredManualPurchase,
+  fetchTenantContextByMeter,
   findTenantContextByMeter,
-  mockTokenFromSeed,
-  notifyTokenPurchasesUpdated,
   type ManualTokenChannel,
-  type TokenPurchaseRow,
 } from "@/lib/tokens-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type ManualTokensViewProps = {
@@ -44,16 +45,67 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
     setMeterNo(initialMeterNo);
   }, [initialMeterNo]);
 
-  const resolvedContext = useMemo(() => {
-    const trimmed = meterNo.trim();
-    if (trimmed.length < 10) return null;
-    return findTenantContextByMeter(trimmed);
-  }, [meterNo]);
+  const [resolvedContext, setResolvedContext] = useState<{
+    tenantId: string;
+    name: string;
+    property: string;
+    unit: string;
+  } | null>(null);
+  const [contextSource, setContextSource] = useState<"none" | "supabase" | "mock">("none");
+
+  const loadMeterContext = useCallback(async (raw: string) => {
+    const trimmed = raw.trim();
+    if (trimmed.length < 10) {
+      setResolvedContext(null);
+      setContextSource("none");
+      return;
+    }
+    const supabase = tryGetSupabaseBrowserClient();
+    if (supabase) {
+      try {
+        const ctx = await fetchTenantContextByMeter(supabase, trimmed);
+        if (ctx) {
+          setResolvedContext(ctx);
+          setContextSource("supabase");
+          return;
+        }
+      } catch {
+        /* fall through to mock */
+      }
+    }
+    const mock = findTenantContextByMeter(trimmed);
+    setResolvedContext(mock);
+    setContextSource(mock ? "mock" : "none");
+  }, []);
+
+  useEffect(() => {
+    if (!meterNo.trim()) return;
+    const t = window.setTimeout(() => {
+      void loadMeterContext(meterNo);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [meterNo, loadMeterContext]);
+
+  function handleMeterChange(id: string, meter: MeterRow | null) {
+    setMeterNo(id);
+    if (meter?.tenantId && meter.tenantName) {
+      setResolvedContext({
+        tenantId: meter.tenantId,
+        name: meter.tenantName,
+        property: meter.buildingName ?? "—",
+        unit: meter.unitLabel ?? "—",
+      });
+      setContextSource("supabase");
+    } else {
+      setResolvedContext(null);
+      setContextSource("none");
+    }
+  }
 
   function validate(): boolean {
     const m = meterNo.trim();
     if (!m) {
-      setError("Enter the meter number.");
+      setError("Select a meter from the list.");
       return false;
     }
     if (!/^\d{10,16}$/.test(m)) {
@@ -77,39 +129,33 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 650));
+    setError(null);
     const m = meterNo.trim();
     const amt = Math.round(Number(amountKes.replace(/,/g, "")));
-    const seed = `${m}-${Date.now()}`;
-    const tokenFormatted = mockTokenFromSeed(seed);
-    const ctx = findTenantContextByMeter(m);
-    const orderNo = `ORD-MAN-${Date.now().toString(36).toUpperCase().slice(-8)}`;
-    const createdAt = new Date().toISOString().replace("T", " ").slice(0, 19);
-    const id = `MTK-${Date.now()}`;
-    const row: TokenPurchaseRow = {
-      id,
-      createdAt,
+
+    const result = await issueManualToken({
       meterNo: m,
       amountKes: amt,
-      tokenFormatted,
-      tenantName: ctx?.name ?? null,
-      property: ctx?.property ?? null,
-      orderNo,
-      source: "manual",
       channel,
-      note: note.trim() || null,
-    };
-    appendStoredManualPurchase(row);
-    notifyTokenPurchasesUpdated();
+      note: note.trim() || undefined,
+    });
+
+    setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error);
+      toast.error("Could not issue token", { description: result.error });
+      return;
+    }
+
     setSessionIssues((n) => n + 1);
     setLastResult({
-      tokenFormatted,
-      orderNo,
-      amountKes: amt,
-      meterNo: m,
-      at: createdAt,
+      tokenFormatted: result.tokenFormatted,
+      orderNo: result.orderNo,
+      amountKes: result.amountKes,
+      meterNo: result.meterNo,
+      at: result.createdAt,
     });
-    setLoading(false);
     toast.success("STS token issued", {
       description: "Saved to the Tokens ledger. Copy and share securely with the customer.",
     });
@@ -181,7 +227,9 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
             <FieldGroup className="gap-5">
               <div>
                 <FieldTitle className="text-foreground">Generate token</FieldTitle>
-                <FieldDescription>Meter number and amount are sent to the vending service (mocked here).</FieldDescription>
+                <FieldDescription>
+                  Meter number and amount are sent to the LONGi vending service and saved to Supabase.
+                </FieldDescription>
               </div>
 
               {error && (
@@ -191,17 +239,13 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="meter-no">
-                  Meter number<span className="text-destructive"> *</span>
-                </Label>
-                <Input
+                <MeterSearchSelect
                   id="meter-no"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="e.g. 0159000000640"
+                  required
                   value={meterNo}
-                  onChange={(e) => setMeterNo(e.target.value.replace(/\D/g, "").slice(0, 16))}
-                  className="h-10 rounded-full font-mono text-sm"
+                  onChange={handleMeterChange}
+                  disabled={loading}
+                  description="Pick from onboarded meters or search by ID, supplier, tenant, or site."
                 />
                 {resolvedContext ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs dark:border-border/80">
@@ -220,7 +264,11 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
                     <span className="text-muted-foreground">{resolvedContext.unit}</span>
                   </div>
                 ) : meterNo.trim().length >= 10 ? (
-                  <p className="text-xs text-amber-800 dark:text-amber-200">No tenant linked to this meter in demo data.</p>
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    {contextSource === "mock"
+                      ? "No tenant linked in Supabase — showing demo match only."
+                      : "No tenant linked to this meter yet. You can still vend if LONGi recognizes the meter."}
+                  </p>
                 ) : null}
               </div>
 
@@ -315,8 +363,7 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Submit the form to show the 20-digit STS token here. In production this matches the vending API
-                    response (<code className="rounded bg-muted px-1 text-xs">token</code> field).
+                    Submit the form to vend via LONGi and show the STS token here.
                   </p>
                 )}
               </div>

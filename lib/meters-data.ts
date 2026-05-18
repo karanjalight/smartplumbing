@@ -6,15 +6,21 @@
 import { getBuildings, type BuildingListRow } from "@/lib/buildings-data";
 import { getLandlordRows } from "@/lib/landlords-data";
 import { MOCK_TENANTS, TABLE_PAGE_SIZE_OPTIONS, type TenantRow } from "@/lib/tenants-data";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/lib/supabase/types";
+import { listMeterDirectory } from "@/lib/supabase/queries";
 
 export type MeterLifecycleStatus = "active" | "inactive" | "fault" | "maintenance";
-export type MeterConnectivity = "online" | "offline" | "intermittent";
+export type MeterConnectivity = "online" | "offline" | "intermittent" | "unknown";
 export type MeterModelType = "water_prepay_m3" | "water_prepay_currency" | "postpay";
+
+export type MeterDirectoryDbRow = Database["public"]["Views"]["meter_directory"]["Row"];
 
 export type MeterRow = {
   meterId: string;
-  /** Physical / manufacturer serial for inventory (mock-derived from meter ID). */
-  serialNumber: string;
+  /** Vendor / manufacturer name from onboarding. */
+  supplier: string;
   modelType: MeterModelType;
   status: MeterLifecycleStatus;
   connectivity: MeterConnectivity;
@@ -123,6 +129,38 @@ export function meterTypeLabel(modelType: MeterModelType): string {
   return "Postpay";
 }
 
+/** Map `meter_directory` view row to the dashboard `MeterRow` shape. */
+export function mapMeterDirectoryToUiRow(row: MeterDirectoryDbRow): MeterRow {
+  const meterNo = row.meter_no ?? "";
+  const connectivity = (row.connectivity_status ?? "unknown") as MeterConnectivity;
+  const installed = row.installed_on?.trim();
+  const lastSync = row.last_sync_at
+    ? new Date(row.last_sync_at).toLocaleString("en-KE", {
+        dateStyle: "short",
+        timeStyle: "short",
+      })
+    : "Never";
+
+  return {
+    meterId: meterNo,
+    supplier: row.supplier?.trim() || "—",
+    modelType: row.model_type as MeterModelType,
+    status: row.lifecycle_status as MeterLifecycleStatus,
+    connectivity,
+    tenantId: row.tenant_id,
+    tenantName: row.tenant_name,
+    landlordId: row.landlord_id,
+    landlordCompany: row.landlord_company,
+    buildingId: row.building_id,
+    buildingName: row.building_name,
+    unitLabel: row.unit_label,
+    installedOn: installed && installed.length > 0 ? installed : "—",
+    latestReadingM3: row.latest_reading_m3 != null ? Number(row.latest_reading_m3) : null,
+    lastSyncAt: lastSync,
+    openAlerts: row.open_alerts ?? 0,
+  };
+}
+
 /** Build a meter row from tenant + building directory (used by admin list + landlord merged views). */
 export function buildMeterRowFromTenant(
   tenant: TenantRow,
@@ -135,7 +173,7 @@ export function buildMeterRowFromTenant(
 
   return {
     meterId: tenant.meterId,
-    serialNumber: `SN-${tenant.meterId.replace(/\D/g, "").slice(-8).padStart(8, "0")}`,
+    supplier: "—",
     modelType: meta.modelType!,
     status: meta.status!,
     connectivity: meta.connectivity!,
@@ -161,6 +199,143 @@ export function getMeterRows(): MeterRow[] {
     const landlord = landlords.find((l) => l.id === tenant.landlordId);
     return buildMeterRowFromTenant(tenant, buildings, landlord?.company ?? null);
   });
+}
+
+/** Spare meters in inventory (not linked to a tenant in mock seed). */
+const LOOSE_INVENTORY_METERS: MeterRow[] = [
+  {
+    meterId: "0159000000991",
+    supplier: "LONGi",
+    modelType: "water_prepay_m3",
+    status: "active",
+    connectivity: "online",
+    tenantId: null,
+    tenantName: null,
+    landlordId: null,
+    landlordCompany: null,
+    buildingId: null,
+    buildingName: null,
+    unitLabel: null,
+    installedOn: "2026-02-10",
+    latestReadingM3: 0,
+    lastSyncAt: "2026-05-10 09:15",
+    openAlerts: 0,
+  },
+  {
+    meterId: "0159000000992",
+    supplier: "Kamstrup",
+    modelType: "water_prepay_m3",
+    status: "active",
+    connectivity: "online",
+    tenantId: null,
+    tenantName: null,
+    landlordId: null,
+    landlordCompany: null,
+    buildingId: null,
+    buildingName: null,
+    unitLabel: null,
+    installedOn: "2026-02-18",
+    latestReadingM3: 0,
+    lastSyncAt: "2026-05-11 11:40",
+    openAlerts: 0,
+  },
+  {
+    meterId: "70000009993",
+    supplier: "Sensus",
+    modelType: "water_prepay_currency",
+    status: "inactive",
+    connectivity: "offline",
+    tenantId: null,
+    tenantName: null,
+    landlordId: null,
+    landlordCompany: null,
+    buildingId: null,
+    buildingName: null,
+    unitLabel: null,
+    installedOn: "2026-03-01",
+    latestReadingM3: null,
+    lastSyncAt: "2026-04-20 07:00",
+    openAlerts: 0,
+  },
+];
+
+function mergeMeterRowsById(rows: MeterRow[]): MeterRow[] {
+  const m = new Map<string, MeterRow>();
+  for (const r of rows) {
+    m.set(r.meterId, r);
+  }
+  return Array.from(m.values()).sort((a, b) => a.meterId.localeCompare(b.meterId));
+}
+
+/** Admin tenant form: onboarded meters + spare inventory (deduped by meter ID). */
+export function getAdminMetersForTenantPicker(): MeterRow[] {
+  return mergeMeterRowsById([...getMeterRows(), ...LOOSE_INVENTORY_METERS]);
+}
+
+/** All meters for manual token issuance picker (includes assigned meters). */
+export function getMetersForManualTokenPicker(): MeterRow[] {
+  return mergeMeterRowsById([...getMeterRows(), ...LOOSE_INVENTORY_METERS]);
+}
+
+/** Admin meters list from Supabase `meter_directory`. */
+export async function fetchMeterRows(
+  client: SupabaseClient<Database>,
+): Promise<MeterRow[]> {
+  const directory = await listMeterDirectory(client);
+  return directory.map(mapMeterDirectoryToUiRow);
+}
+
+/** Landlord portal: meters owned by landlord or installed on their buildings. */
+export async function fetchMeterRowsForLandlord(
+  client: SupabaseClient<Database>,
+  landlordId: string,
+): Promise<MeterRow[]> {
+  const { data: buildings, error: bErr } = await client
+    .from("buildings")
+    .select("id")
+    .eq("landlord_id", landlordId);
+  if (bErr) throw bErr;
+
+  const buildingIds = new Set((buildings ?? []).map((b) => b.id));
+  const directory = await listMeterDirectory(client);
+
+  return directory
+    .filter(
+      (row) =>
+        row.landlord_id === landlordId ||
+        (row.building_id != null && buildingIds.has(row.building_id)),
+    )
+    .map(mapMeterDirectoryToUiRow)
+    .sort((a, b) => a.meterId.localeCompare(b.meterId));
+}
+
+/** Meters for admin create-tenant picker (Supabase `meter_directory`). */
+export async function fetchAdminMetersForTenantPicker(
+  client: SupabaseClient<Database>,
+  landlordId?: string | null,
+): Promise<MeterRow[]> {
+  const directory = await listMeterDirectory(client);
+  let rows = directory.map(mapMeterDirectoryToUiRow);
+
+  if (landlordId) {
+    rows = rows.filter(
+      (m) =>
+        !m.tenantId &&
+        (m.landlordId === null || m.landlordId === landlordId),
+    );
+  } else {
+    rows = rows.filter((m) => !m.tenantId);
+  }
+
+  return rows.sort((a, b) => a.meterId.localeCompare(b.meterId));
+}
+
+export function formatMeterPickerLabel(row: MeterRow): string {
+  const site = row.buildingName?.trim() || "Unassigned site";
+  const assign = row.tenantName?.trim()
+    ? `In use: ${row.tenantName}`
+    : "Available";
+  return `${row.meterId} · ${site} · ${assign}`;
 }
 
 export { TABLE_PAGE_SIZE_OPTIONS };

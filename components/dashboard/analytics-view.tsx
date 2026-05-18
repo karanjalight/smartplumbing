@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import {
   Area,
   AreaChart,
@@ -54,6 +54,7 @@ const PERIOD_OPTIONS: { key: AnalyticsPeriod; short: string }[] = [
   { key: "90d", short: "90d" },
   { key: "all", short: "All" },
 ];
+const subscribe = () => () => {};
 
 function mergeTokenLedger(): TokenPurchaseRow[] {
   const base = getBasePurchasedTokenRows();
@@ -101,11 +102,7 @@ export function AnalyticsView() {
   const stackId = useId();
 
   const [period, setPeriod] = useState<AnalyticsPeriod>("30d");
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   const tokenRows = useMemo(() => mergeTokenLedger(), [pathname]);
   const completedPayments = useMemo(() => getCompletedPayments(), []);

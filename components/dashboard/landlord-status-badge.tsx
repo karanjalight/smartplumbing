@@ -11,11 +11,13 @@ export function LandlordStatusBadge({ status }: { status: LandlordStatus }) {
       "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
     suspended:
       "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300",
+    inactive: "bg-muted text-muted-foreground dark:bg-muted/80",
   };
   const labels: Record<LandlordStatus, string> = {
     active: "Active",
     pending_verification: "Pending verification",
     suspended: "Suspended",
+    inactive: "Inactive",
   };
   return (
     <span

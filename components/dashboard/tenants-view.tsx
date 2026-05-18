@@ -12,18 +12,24 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  MOCK_LANDLORDS,
-  MOCK_TENANTS,
   TABLE_PAGE_SIZE_OPTIONS,
+  fetchLandlordsForTenantFilter,
+  fetchTenantRows,
   formatKes,
+  getLandlordsForTenantFilter,
+  getTenantRows,
+  type Landlord,
+  type TenantRow,
   type TenantStatus,
 } from "@/lib/tenants-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const FILTER_OPTIONS: {
@@ -42,6 +48,13 @@ const DROPDOWN_TRIGGER =
   "flex h-10 w-full items-center justify-between gap-2 rounded-full border border-border bg-background px-3 text-left text-sm dark:border-border/80 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function TenantsView() {
+  const pathname = usePathname();
+  const [allRows, setAllRows] = useState<TenantRow[]>([]);
+  const [landlords, setLandlords] = useState<Landlord[]>([]);
+  const [listSource, setListSource] = useState<"loading" | "mock" | "supabase">(
+    "loading",
+  );
+
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | TenantStatus>("all");
   const [buildingCategory, setBuildingCategory] = useState<string>("all");
@@ -54,6 +67,40 @@ export function TenantsView() {
   const [pageSize, setPageSize] = useState(5);
   const landlordMenuRef = useRef<HTMLDivElement>(null);
   const statusMenuRef = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setAllRows(getTenantRows());
+      setLandlords(getLandlordsForTenantFilter());
+      setListSource("mock");
+      return;
+    }
+
+    try {
+      const [rows, landlordRows] = await Promise.all([
+        fetchTenantRows(supabase),
+        fetchLandlordsForTenantFilter(supabase),
+      ]);
+      setAllRows(rows);
+      setLandlords(landlordRows);
+      setListSource("supabase");
+    } catch {
+      setAllRows(getTenantRows());
+      setLandlords(getLandlordsForTenantFilter());
+      setListSource("mock");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, pathname]);
+
+  const landlordById = useMemo(() => {
+    const map = new Map<string, Landlord>();
+    for (const l of landlords) map.set(l.id, l);
+    return map;
+  }, [landlords]);
 
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
@@ -70,25 +117,26 @@ export function TenantsView() {
   }, []);
 
   const summary = useMemo(() => {
-    const total = MOCK_TENANTS.length;
-    const activeMeters = MOCK_TENANTS.filter((t) => t.status === "active").length;
-    const lowBalance = MOCK_TENANTS.filter((t) => t.status === "low_credit").length;
-    const pendingPayments = MOCK_TENANTS.filter(
+    const total = allRows.length;
+    const activeMeters = allRows.filter((t) => t.status === "active").length;
+    const lowBalance = allRows.filter((t) => t.status === "low_credit").length;
+    const pendingPayments = allRows.filter(
       (t) => t.status === "overdue" || t.balanceKes === 0
     ).length;
     return { total, activeMeters, lowBalance, pendingPayments };
-  }, []);
+  }, [allRows]);
 
   const matchesSearchAndStatus = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return MOCK_TENANTS.filter((t) => {
+    return allRows.filter((t) => {
       if (filter !== "all" && t.status !== filter) return false;
       if (landlordId !== "all" && t.landlordId !== landlordId) return false;
       if (!q) return true;
-      const ll = MOCK_LANDLORDS.find((l) => l.id === t.landlordId);
+      const ll = landlordById.get(t.landlordId);
       const landlordHaystack = ll
         ? `${ll.name} ${ll.company}`.toLowerCase()
         : "";
+      const displayId = (t.code ?? t.id).toLowerCase();
       return (
         t.name.toLowerCase().includes(q) ||
         t.meterId.toLowerCase().includes(q) ||
@@ -96,10 +144,11 @@ export function TenantsView() {
         t.unit.toLowerCase().includes(q) ||
         t.phone.replace(/\s/g, "").includes(q.replace(/\s/g, "")) ||
         t.id.toLowerCase().includes(q) ||
+        displayId.includes(q) ||
         landlordHaystack.includes(q)
       );
     });
-  }, [search, filter, landlordId]);
+  }, [allRows, search, filter, landlordId, landlordById]);
 
   const buildingCategories = useMemo(() => {
     const map = new Map<string, number>();
@@ -118,16 +167,16 @@ export function TenantsView() {
 
   const landlordsForDropdown = useMemo(() => {
     const q = landlordQuery.trim().toLowerCase();
-    return MOCK_LANDLORDS.filter(
+    return landlords.filter(
       (l) =>
         !q ||
         l.name.toLowerCase().includes(q) ||
         l.company.toLowerCase().includes(q) ||
         l.id.toLowerCase().includes(q)
     );
-  }, [landlordQuery]);
+  }, [landlords, landlordQuery]);
 
-  const selectedLandlord = MOCK_LANDLORDS.find((l) => l.id === landlordId);
+  const selectedLandlord = landlords.find((l) => l.id === landlordId);
   const selectedStatusOption = FILTER_OPTIONS.find((f) => f.key === filter)!;
 
   const statusesForDropdown = useMemo(() => {
@@ -173,6 +222,13 @@ export function TenantsView() {
           <p className="mt-1 text-sm text-muted-foreground">
             View and manage tenant accounts, STS meters, and water credit balances.
           </p>
+          {listSource === "loading" ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading tenants…</p>
+          ) : listSource === "mock" ? (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              Showing demo data — sign in as admin with Supabase configured for live records.
+            </p>
+          ) : null}
         </div>
         <Link
           href="/dashboard/tenants/new"
@@ -532,25 +588,36 @@ export function TenantsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {pageRows.length === 0 ? (
+              {listSource === "loading" ? (
                 <tr>
                   <td
                     colSpan={9}
                     className="px-4 py-12 text-center text-muted-foreground"
                   >
-                    No tenants match your search or filters.
+                    Loading tenants from Supabase…
+                  </td>
+                </tr>
+              ) : pageRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="px-4 py-12 text-center text-muted-foreground"
+                  >
+                    {listSource === "supabase" && allRows.length === 0
+                      ? "No tenants in Supabase yet. Create one with Add New Tenant."
+                      : "No tenants match your search or filters."}
                   </td>
                 </tr>
               ) : (
                 pageRows.map((row) => {
-                  const ll = MOCK_LANDLORDS.find((l) => l.id === row.landlordId);
+                  const ll = landlordById.get(row.landlordId);
                   return (
                     <tr
                       key={row.id}
                       className="bg-card transition-colors hover:bg-muted/40"
                     >
-                      <td className="px-4 py-3 font-semibold text-foreground">
-                        {row.id}
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">
+                        {row.code ?? row.id}
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-foreground">

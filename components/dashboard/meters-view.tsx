@@ -16,11 +16,13 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  fetchMeterRows,
   getMeterRows,
   meterTypeLabel,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -29,6 +31,7 @@ import {
   type MeterModelType,
   type MeterRow,
 } from "@/lib/meters-data";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const DROPDOWN_TRIGGER =
@@ -55,6 +58,7 @@ const CONNECTIVITY_FILTER_OPTIONS: {
   { key: "online", label: "Online", hint: "Connected and reporting" },
   { key: "intermittent", label: "Intermittent", hint: "Unstable reporting" },
   { key: "offline", label: "Offline", hint: "No recent sync" },
+  { key: "unknown", label: "Unknown", hint: "Connectivity not yet confirmed" },
 ];
 
 const TYPE_FILTER_OPTIONS: {
@@ -90,6 +94,7 @@ function connectivityBadge(connectivity: MeterConnectivity) {
     intermittent:
       "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
     offline: "bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
+    unknown: "bg-muted text-muted-foreground",
   };
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize", cls[connectivity])}>
@@ -113,7 +118,11 @@ function meterIsHealthy(row: MeterRow): boolean {
 }
 
 export function MetersView() {
-  const allRows = useMemo(() => getMeterRows(), []);
+  const pathname = usePathname();
+  const [allRows, setAllRows] = useState<MeterRow[]>([]);
+  const [listSource, setListSource] = useState<"loading" | "mock" | "supabase">(
+    "loading",
+  );
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | MeterLifecycleStatus>("all");
@@ -132,6 +141,28 @@ export function MetersView() {
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const connectivityMenuRef = useRef<HTMLDivElement>(null);
   const typeMenuRef = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (!supabase) {
+      setAllRows(getMeterRows());
+      setListSource("mock");
+      return;
+    }
+
+    try {
+      const rows = await fetchMeterRows(supabase);
+      setAllRows(rows);
+      setListSource("supabase");
+    } catch {
+      setAllRows(getMeterRows());
+      setListSource("mock");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, pathname]);
 
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
@@ -161,7 +192,7 @@ export function MetersView() {
       if (!q) return true;
       return (
         r.meterId.toLowerCase().includes(q) ||
-        r.serialNumber.toLowerCase().includes(q) ||
+        r.supplier.toLowerCase().includes(q) ||
         (r.tenantName ?? "").toLowerCase().includes(q) ||
         (r.tenantId ?? "").toLowerCase().includes(q) ||
         (r.buildingName ?? "").toLowerCase().includes(q) ||
@@ -226,6 +257,13 @@ export function MetersView() {
           <p className="mt-1 text-sm text-muted-foreground">
             STS meter fleet: readings, sync, link health, and where each device is installed (assignment is secondary).
           </p>
+          {listSource === "loading" ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading meters…</p>
+          ) : listSource === "mock" ? (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              Showing demo data — sign in as admin with Supabase configured for live records.
+            </p>
+          ) : null}
         </div>
         <Link
           href="/dashboard/meters/onboard"
@@ -313,7 +351,7 @@ export function MetersView() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search meter ID, serial, type, site, tenant…"
+            placeholder="Search meter ID, supplier, type, site, tenant…"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -522,10 +560,18 @@ export function MetersView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {pageRows.length === 0 ? (
+              {listSource === "loading" ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
-                    No meters match your search or filters.
+                    Loading meters from Supabase…
+                  </td>
+                </tr>
+              ) : pageRows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    {allRows.length === 0
+                      ? "No meters in inventory yet. Onboard a meter to get started."
+                      : "No meters match your search or filters."}
                   </td>
                 </tr>
               ) : (
@@ -533,7 +579,7 @@ export function MetersView() {
                   <tr key={row.meterId} className="bg-card transition-colors hover:bg-muted/40">
                     <td className="px-4 py-3">
                       <div className="font-mono text-xs font-semibold text-foreground">{row.meterId}</div>
-                      <div className="text-xs text-muted-foreground">{row.serialNumber}</div>
+                      <div className="text-xs text-muted-foreground">{row.supplier}</div>
                     </td>
                     <td className="px-4 py-3 font-medium text-foreground">{meterTypeLabel(row.modelType)}</td>
                     <td className="px-4 py-3 tabular-nums text-foreground">{row.installedOn}</td>

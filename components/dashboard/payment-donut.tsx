@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   Cell,
   Legend,
@@ -16,12 +16,10 @@ const DATA = [
   { name: "Mobile", value: 25, color: "#EC4899" },
 ];
 
-export function PaymentDonut() {
-  const [isMounted, setIsMounted] = useState(false);
+const subscribe = () => () => {};
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+export function PaymentDonut() {
+  const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!isMounted) {
     return <div className="h-[200px] min-h-[200px] w-full min-w-0 rounded-md bg-muted/30" aria-hidden />;

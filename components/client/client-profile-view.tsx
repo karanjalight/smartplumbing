@@ -13,10 +13,14 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
+import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type ProfileMenuItem = {
   label: string;
@@ -52,10 +56,25 @@ const PROFILE_MENU: ProfileMenuItem[] = [
   },
 ];
 
-export function ClientProfileView() {
+export function ClientProfileView({
+  profile,
+}: {
+  profile: ClientTenantProfile;
+}) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"activity" | "settings">("activity");
   const [paymentAlerts, setPaymentAlerts] = useState(true);
   const [serviceAlerts, setServiceAlerts] = useState(true);
+
+  async function handleSignOut() {
+    const supabase = tryGetSupabaseBrowserClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+      router.refresh();
+    }
+    toast.success("Signed out");
+    router.push("/clients/login");
+  }
 
   return (
     <main className="min-h-screen bg-white dark:bg-slate-950">
@@ -73,11 +92,13 @@ export function ClientProfileView() {
           </div>
           <div className="relative z-10 mt-3 flex items-center gap-3">
             <div className="flex size-14 items-center justify-center rounded-full bg-white/25 text-xl font-semibold shadow">
-              MK
+              {profile.initials}
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Muche Karanja</h1>
-              <p className="text-xs text-white/85">House A-12 . Smartone Residency</p>
+              <h1 className="text-lg font-semibold">{profile.name}</h1>
+              <p className="text-xs text-white/85">
+                {profile.houseLabel} · {profile.propertyName}
+              </p>
             </div>
           </div>
           <div className="relative z-10 mt-4 grid grid-cols-3 gap-2 text-center text-[11px]">
@@ -87,7 +108,7 @@ export function ClientProfileView() {
             </div>
             <div className="rounded-xl bg-white/15 px-2 py-2">
               <p className="text-white/70">Rent status</p>
-              <p className="mt-1 text-sm font-semibold">On Track</p>
+              <p className="mt-1 text-sm font-semibold">{profile.rentLabel}</p>
             </div>
             <div className="rounded-xl bg-white/15 px-2 py-2">
               <p className="text-white/70">Open requests</p>
@@ -191,13 +212,14 @@ export function ClientProfileView() {
           </div>
         )}
 
-        <Link
-          href="/clients/login"
+        <button
+          type="button"
+          onClick={handleSignOut}
           className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400"
         >
           <LogOut className="size-4" aria-hidden />
           Log out
-        </Link>
+        </button>
       </section>
 
       <ClientMobileNav />
