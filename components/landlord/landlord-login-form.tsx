@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Droplets, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { AuthBrandHeader } from "@/components/brand-logo";
 import { AuthPrimaryButton } from "@/components/auth-primary-button";
 import {
   Field,
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  authBrandIconClassName,
   authIconButtonClassName,
   authInputClassName,
   authLinkClassName,
@@ -137,15 +137,7 @@ export function LandlordLoginForm() {
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <div className="mb-10 flex items-center gap-2 text-foreground">
-        <Droplets
-          className={cn("size-7 shrink-0", authBrandIconClassName)}
-          aria-hidden
-        />
-        <span className="text-xl font-semibold tracking-tight">
-          Smart Plumbing
-        </span>
-      </div>
+      <AuthBrandHeader />
 
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         Landlord portal
@@ -184,7 +176,7 @@ export function LandlordLoginForm() {
           <p>{formError}</p>
           {roleMismatch === "admin" && (
             <p className="mt-2">
-              <Link href="/" className={authLinkClassName}>
+              <Link href="/auth/login" className={authLinkClassName}>
                 Go to main sign-in
               </Link>
             </p>
@@ -285,7 +277,7 @@ export function LandlordLoginForm() {
 
       <p className="mt-8 text-left text-sm text-muted-foreground">
         Administrator?{" "}
-        <Link href="/" className={authLinkClassName}>
+        <Link href="/auth/login" className={authLinkClassName}>
           Use the main sign-in
         </Link>
       </p>

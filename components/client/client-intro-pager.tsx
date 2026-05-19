@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { BrandLogo } from "@/components/brand-logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type IntroSlide = {
@@ -57,14 +59,17 @@ export function ClientIntroPager() {
         <div className="absolute bottom-20 -left-8 h-32 w-32 rounded-full bg-[#0A4266]/10 blur-2xl" />
 
         <div className="relative z-10 flex min-h-[700px] flex-col px-6 py-7">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-[#2147f4]">Client</p>
-            <Link
-              href="/clients/login"
-              className="text-xs font-medium text-muted-foreground underline decoration-2 underline-offset-3"
-            >
-              Skip
-            </Link>
+          <div className="flex items-center justify-between gap-2">
+            <BrandLogo variant="compact" />
+            <div className="flex items-center gap-2">
+              <ThemeToggle className="size-9 min-h-9 min-w-9 rounded-full [&_svg]:size-4" />
+              <Link
+                href="/clients/login"
+                className="text-xs font-medium text-muted-foreground underline decoration-2 underline-offset-3"
+              >
+                Skip
+              </Link>
+            </div>
           </div>
 
           <div className="mt-14 flex flex-1 flex-col">

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Droplets, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { signUpAdmin } from "@/app/auth/actions";
+import { AuthBrandHeader } from "@/components/brand-logo";
 import { AuthPrimaryButton } from "@/components/auth-primary-button";
 import {
   Field,
@@ -19,7 +20,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  authBrandIconClassName,
   authIconButtonClassName,
   authInputClassName,
   authLinkClassName,
@@ -78,8 +78,8 @@ export function SignUpForm() {
           toast.error(result.error);
           return;
         }
-        toast.success("Admin account created. Sign in on the home page.");
-        router.push("/");
+        toast.success("Admin account created. Sign in to continue.");
+        router.push("/auth/login");
       } finally {
         setSubmitting(false);
       }
@@ -133,9 +133,9 @@ export function SignUpForm() {
 
       toast.message("Check your email", {
         description:
-          "We sent a confirmation link if your project requires email verification. After confirming, sign in from the home page.",
+          "We sent a confirmation link if your project requires email verification. After confirming, sign in to continue.",
       });
-      router.push("/");
+      router.push("/auth/login");
     } finally {
       setSubmitting(false);
     }
@@ -143,12 +143,7 @@ export function SignUpForm() {
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <div className="mb-10 flex items-center gap-2 text-foreground">
-        <Droplets className={cn("size-7 shrink-0", authBrandIconClassName)} aria-hidden />
-        <span className="text-xl font-semibold tracking-tight">
-          Smart Plumbing
-        </span>
-      </div>
+      <AuthBrandHeader />
 
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         GET STARTED
@@ -321,7 +316,7 @@ export function SignUpForm() {
 
       <p className="mt-8 text-left text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/" className={authLinkClassName}>
+        <Link href="/auth/login" className={authLinkClassName}>
           Sign in
         </Link>
       </p>

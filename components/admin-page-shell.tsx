@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { ThemeToggle } from "@/components/theme-toggle";
+import { FixedThemeToggle } from "@/components/fixed-theme-toggle";
 import { cn } from "@/lib/utils";
 
 const AUTH_HERO_IMAGE =
@@ -16,9 +16,7 @@ export function AuthPageShell({ children }: { children: React.ReactNode }) {
         >
           Skip to main content
         </a>
-        <div className="absolute top-4 right-4 z-10 sm:top-6 sm:right-6 lg:top-8 lg:right-8">
-          <ThemeToggle />
-        </div>
+        <FixedThemeToggle fixed={false} />
         <main id="auth-main" className="w-full" tabIndex={-1}>
           {children}
         </main>

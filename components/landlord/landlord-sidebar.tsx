@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronLeft,
   CreditCard,
-  Droplets,
   FileBarChart,
   FileText,
   Gauge,
@@ -26,6 +25,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
+import { SidebarLogo } from "@/components/sidebar-logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -309,22 +309,14 @@ export function LandlordSidebar({
       )}
       aria-label="Landlord navigation"
     >
-      <div className="flex min-h-16 items-center justify-between gap-2 border-b border-sidebar-border px-3">
+      <div className="flex min-h-24 items-center justify-between gap-2 border-b border-sidebar-border px-3 py-2">
         <Link
           href="/landlords/dashboard"
           onClick={() => onMobileClose?.()}
-          className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-foreground no-underline"
-          aria-label="Landlord portal — go to dashboard"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden text-foreground no-underline"
+          aria-label="Mali Smart — go to landlord dashboard"
         >
-          <Droplets
-            className="size-8 shrink-0 text-[#0A4266] dark:text-[#6BB4E8]"
-            aria-hidden
-          />
-          {(!collapsed || !isMdUp) && (
-            <span className="truncate text-lg font-bold tracking-tight">
-              Landlord portal
-            </span>
-          )}
+          <SidebarLogo compact={showCollapsedNav} />
         </Link>
         <div className="flex shrink-0 items-center gap-1">
           {onMobileClose && (

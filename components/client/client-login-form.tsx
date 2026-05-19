@@ -9,7 +9,9 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { AuthBrandHeader } from "@/components/brand-logo";
 import { AuthPrimaryButton } from "@/components/auth-primary-button";
+import { FixedThemeToggle } from "@/components/fixed-theme-toggle";
 import {
   Field,
   FieldError,
@@ -120,10 +122,12 @@ export function ClientLoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-white px-4 py-8 dark:bg-slate-950">
-      <section className="w-full max-w-sm rounded-[2rem] border border-slate-200 bg-white px-6 py-8  dark:border-slate-800 dark:bg-slate-900">
-        
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+    <main className="relative flex min-h-screen items-center justify-center bg-white px-4 py-8 dark:bg-slate-950">
+      <FixedThemeToggle />
+      <section className="w-full max-w-sm rounded-[2rem] border border-slate-200 bg-white px-6 py-8 dark:border-slate-800 dark:bg-slate-900">
+        <AuthBrandHeader className="mb-8" />
+
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
           Welcome back
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">

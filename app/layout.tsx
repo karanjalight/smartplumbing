@@ -16,14 +16,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sign in — Smart Plumbing",
+  title: {
+    default: "Smart Plumbing — Property operations platform for Kenya",
+    template: "%s · Smart Plumbing",
+  },
   description:
-    "Access your jobs, invoices, and customer records with Smart Plumbing.",
+    "Smart water metering, rent collection, maintenance, and WiFi billing — one platform for Kenyan landlords, agencies, and estates.",
   manifest: "/manifest.webmanifest",
-  applicationName: "Smart Plumbing Client",
+  applicationName: "Smart Plumbing",
   appleWebApp: {
     capable: true,
-    title: "Smart Plumbing Client",
+    title: "Smart Plumbing",
     statusBarStyle: "default",
   },
 };

@@ -15,16 +15,14 @@ import {
   LogOut,
   Menu as MenuIcon,
   MessageSquare,
-  Moon,
   Settings,
   ShoppingCart,
-  Sun,
   Ticket,
   User,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTheme } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -186,14 +184,9 @@ export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
   const settingsHref = isLandlord
     ? "/landlords/dashboard/settings"
     : "/dashboard/settings";
-  const signInHref = isLandlord ? "/landlords/login" : "/";
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const signInHref = isLandlord ? "/landlords/login" : "/auth/login";
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const isDark = resolvedTheme === "dark";
-
-  useEffect(() => setMounted(true), []);
 
   async function handleSignOut() {
     if (signingOut) return;
@@ -294,23 +287,7 @@ export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
 
-        {mounted && (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-10 rounded-full border-[#0A4266] bg-[#0A4266] text-white hover:bg-[#083d5c] hover:text-white dark:border-[#6BB4E8] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            aria-pressed={isDark}
-          >
-            {isDark ? (
-              <Sun className="size-5" aria-hidden />
-            ) : (
-              <Moon className="size-5" aria-hidden />
-            )}
-          </Button>
-        )}
+        <ThemeToggle className="size-10 min-h-10 min-w-10" />
 
         <button
           type="button"
