@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Menu, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -9,11 +9,25 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
-  { label: "Platform", href: "/platform" },
-  { label: "Metering", href: "/metering" },
-  { label: "Residents", href: "/residents" },
-  { label: "Operators", href: "/operators" },
-  { label: "Trust", href: "/trust" },
+  { label: "Home", href: "/" },
+  { label: "About Us", href: "/trust" },
+  {
+    label: "Services",
+    children: [
+      { label: "Water Metering", href: "/metering" },
+      { label: "Electricity", href: "/platform" },
+      { label: "Gas Metering", href: "/platform" },
+      { label: "Installation", href: "/platform" },
+    ],
+  },
+  {
+    label: "Platform",
+    children: [
+      { label: "Landlords", href: "/operators" },
+      { label: "Tenants", href: "/residents" },
+    ],
+  },
+  { label: "Contact Us", href: "/book-demo" },
 ] as const;
 
 /**
@@ -50,6 +64,27 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
       document.body.style.overflow = prev;
     };
   }, [open]);
+
+  const navItemClassName = cn(
+    "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    onDark
+      ? "text-white/80 hover:text-white focus-visible:ring-white/50"
+      : "text-muted-foreground hover:text-foreground focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
+  );
+
+  const dropdownPanelClassName = cn(
+    "invisible absolute right-0 top-full mt-3 w-56 translate-y-1 rounded-2xl border p-2 opacity-0 shadow-xl transition-all group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100",
+    onDark
+      ? "border-white/15 bg-[#062538]/95 shadow-black/25 backdrop-blur-xl"
+      : "border-border bg-background shadow-black/10"
+  );
+
+  const dropdownLinkClassName = cn(
+    "rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2",
+    onDark
+      ? "text-white/80 hover:bg-white/10 hover:text-white focus-visible:ring-white/50"
+      : "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
+  );
 
   return (
     <header
@@ -89,74 +124,105 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
           </span>
         </Link>
 
-        <nav
-          aria-label="Primary"
-          className="hidden items-center gap-1 lg:flex"
-        >
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
+        <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+          <nav
+            aria-label="Primary"
+            className="hidden items-center gap-1 lg:flex"
+          >
+            {NAV_LINKS.map((link) => (
+              "children" in link ? (
+                <div key={link.label} className="group relative">
+                  <button
+                    type="button"
+                    className={navItemClassName}
+                    aria-haspopup="menu"
+                  >
+                    {link.label}
+                    <ChevronDown
+                      className="size-3.5 transition-transform group-hover:rotate-180 group-focus-within:rotate-180"
+                      aria-hidden
+                    />
+                  </button>
+                  <div className={dropdownPanelClassName}>
+                    <div
+                      role="menu"
+                      aria-label={`${link.label} menu`}
+                      className="flex flex-col gap-1"
+                    >
+                      {link.children.map((child) => (
+                        <Link
+                          key={`${link.label}-${child.label}`}
+                          href={child.href}
+                          role="menuitem"
+                          className={dropdownLinkClassName}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={navItemClassName}
+                >
+                  {link.label}
+                </Link>
+              )
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <ThemeToggle
               className={cn(
-                "rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "hidden size-10 sm:inline-flex",
+                onDark &&
+                  "border-white/25 bg-white/[0.06] text-white hover:bg-white/15"
+              )}
+            />
+            <Link
+              href="/auth/login"
+              className={cn(
+                "hidden h-10 items-center justify-center rounded-full border px-4 text-sm font-semibold transition-colors sm:inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 onDark
-                  ? "text-white/80 hover:text-white focus-visible:ring-white/50"
-                  : "text-muted-foreground hover:text-foreground focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
+                  ? "border-white/25 bg-white/[0.05] text-white backdrop-blur hover:bg-white/15 focus-visible:ring-white/50"
+                  : "border-border bg-background text-foreground hover:bg-muted focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
               )}
             >
-              {link.label}
+              Sign in
             </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <ThemeToggle
-            className={cn(
-              "hidden size-10 sm:inline-flex",
-              onDark &&
-                "border-white/25 bg-white/[0.06] text-white hover:bg-white/15"
-            )}
-          />
-          <Link
-            href="/auth/login"
-            className={cn(
-              "hidden h-10 items-center justify-center rounded-full border px-4 text-sm font-semibold transition-colors sm:inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              onDark
-                ? "border-white/25 bg-white/[0.05] text-white backdrop-blur hover:bg-white/15 focus-visible:ring-white/50"
-                : "border-border bg-background text-foreground hover:bg-muted focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
-            )}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/book-demo"
-            className={cn(
-              "group inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              onDark
-                ? "bg-white text-[#0A4266] hover:bg-[#7AB8D9] hover:text-[#062538] focus-visible:ring-white/50"
-                : "bg-[#0A4266] text-white hover:bg-[#083350] hover:shadow-md focus-visible:ring-[#0A4266] dark:bg-[#6BB4E8] dark:text-[#062538] dark:hover:bg-[#7AB8D9] dark:focus-visible:ring-[#7AB8D9]"
-            )}
-          >
-            Book a demo
-            <ArrowUpRight
-              className="size-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-              aria-hidden
-            />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className={cn(
-              "inline-flex size-10 items-center justify-center rounded-full border lg:hidden",
-              onDark
-                ? "border-white/25 bg-white/[0.05] text-white backdrop-blur"
-                : "border-border bg-background text-foreground"
-            )}
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-          >
-            {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
-          </button>
+            <Link
+              href="/book-demo"
+              className={cn(
+                "group inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                onDark
+                  ? "bg-white text-[#0A4266] hover:bg-[#7AB8D9] hover:text-[#062538] focus-visible:ring-white/50"
+                  : "bg-[#0A4266] text-white hover:bg-[#083350] hover:shadow-md focus-visible:ring-[#0A4266] dark:bg-[#6BB4E8] dark:text-[#062538] dark:hover:bg-[#7AB8D9] dark:focus-visible:ring-[#7AB8D9]"
+              )}
+            >
+              Book a demo
+              <ArrowUpRight
+                className="size-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                aria-hidden
+              />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className={cn(
+                "inline-flex size-10 items-center justify-center rounded-full border lg:hidden",
+                onDark
+                  ? "border-white/25 bg-white/[0.05] text-white backdrop-blur"
+                  : "border-border bg-background text-foreground"
+              )}
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+            >
+              {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -167,14 +233,41 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
             className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-4 py-4 sm:px-6"
           >
             {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setOpen(false)}
-                className="rounded-xl px-3 py-3 text-base font-medium text-foreground hover:bg-muted"
-              >
-                {link.label}
-              </Link>
+              "children" in link ? (
+                <details
+                  key={link.label}
+                  className="group rounded-xl [&_summary::-webkit-details-marker]:hidden"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl px-3 py-3 text-base font-medium text-foreground hover:bg-muted">
+                    {link.label}
+                    <ChevronDown
+                      className="size-4 transition-transform group-open:rotate-180"
+                      aria-hidden
+                    />
+                  </summary>
+                  <div className="ml-3 mt-1 flex flex-col gap-1 border-l border-border pl-3">
+                    {link.children.map((child) => (
+                      <Link
+                        key={`${link.label}-${child.label}`}
+                        href={child.href}
+                        onClick={() => setOpen(false)}
+                        className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setOpen(false)}
+                  className="rounded-xl px-3 py-3 text-base font-medium text-foreground hover:bg-muted"
+                >
+                  {link.label}
+                </Link>
+              )
             ))}
             <div className="mt-2 flex items-center gap-2 border-t border-border pt-4">
               <Link
