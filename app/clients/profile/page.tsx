@@ -6,7 +6,7 @@ import {
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "Client profile — Smart Plumbing",
+  title: "Client profile — Mali Smart",
   description:
     "Manage client account settings, token history, rent history, order history, and service history.",
 };

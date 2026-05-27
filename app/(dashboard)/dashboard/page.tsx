@@ -6,7 +6,7 @@ import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { Button } from "@/components/ui/button";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 export const metadata = {
-  title: "Dashboard — Smart Plumbing",
+  title: "Dashboard — Mali Smart",
   description: "Overview of earnings, revenue, and customer payments.",
 };
 

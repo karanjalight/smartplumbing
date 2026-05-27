@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Meter Health — Smart Plumbing Admin",
+  title: "Meter Health — Mali Smart Admin",
   description: "Monitor meter connectivity and health status.",
 };
 

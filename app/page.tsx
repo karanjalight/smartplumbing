@@ -15,12 +15,12 @@ import { TestimonialsSection } from "@/components/marketing/testimonials-section
 
 export const metadata: Metadata = {
   title: {
-    absolute: "Smart Plumbing — The operating system for modern property portfolios",
+    absolute: "Mali Smart — The operating system for modern property portfolios",
   },
   description:
-    "Smart Plumbing replaces spreadsheets and WhatsApp reconciliations with one platform — smart water metering, rent collection, WiFi billing, and maintenance, all on M-Pesa. Built in Nairobi for African property teams.",
+    "Mali Smart replaces spreadsheets and WhatsApp reconciliations with one platform — smart water metering, rent collection, WiFi billing, and maintenance, all on M-Pesa. Built in Nairobi for African property teams.",
   openGraph: {
-    title: "Smart Plumbing — Property operations platform for Kenya",
+    title: "Mali Smart — Property operations platform for Kenya",
     description:
       "Smart water metering, rent collection, maintenance, and WiFi billing — one platform for landlords, agencies, and estates.",
     type: "website",

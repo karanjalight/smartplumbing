@@ -1,7 +1,7 @@
 import { AnalyticsView } from "@/components/dashboard/analytics-view";
 
 export const metadata = {
-  title: "Analytics — Smart Plumbing Admin",
+  title: "Analytics — Mali Smart Admin",
   description: "Water revenue trends, token volume, payment mix, and portfolio signals.",
 };
 

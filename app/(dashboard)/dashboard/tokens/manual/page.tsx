@@ -1,7 +1,7 @@
 import { ManualTokensView } from "@/components/dashboard/manual-tokens-view";
 
 export const metadata = {
-  title: "Manual Tokens — Smart Plumbing Admin",
+  title: "Manual Tokens — Mali Smart Admin",
   description: "Generate manual STS tokens when app-based delivery fails.",
 };
 

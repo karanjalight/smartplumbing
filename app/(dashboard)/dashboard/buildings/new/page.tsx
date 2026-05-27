@@ -1,7 +1,7 @@
 import { CreateBuildingView } from "@/components/buildings/create-building-view";
 
 export const metadata = {
-  title: "Create building — Smart Plumbing Admin",
+  title: "Create building — Mali Smart Admin",
   description:
     "Add a property, assign a landlord, and create houses with rent in Supabase.",
 };

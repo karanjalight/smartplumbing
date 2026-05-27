@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Activity Logs — Smart Plumbing Admin",
+  title: "Activity Logs — Mali Smart Admin",
   description: "Audit trail and system activity logs.",
 };
 

@@ -42,7 +42,7 @@ export function downloadTenantCredentialsPdf(input: TenantCredentialsPdfInput) {
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("SmartOne — Tenant portal access", margin, 18);
+  doc.text("Mali Smart — Tenant portal access", margin, 18);
 
   doc.setTextColor(35, 35, 35);
   doc.setFont("helvetica", "normal");
@@ -129,7 +129,7 @@ export function downloadTenantCredentialsPdf(input: TenantCredentialsPdfInput) {
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
   doc.text(
-    "Issued by SmartOne water billing. This password was set by your landlord or administrator.",
+    "Issued by Mali Smart water billing. This password was set by your landlord or administrator.",
     margin,
     y,
     { maxWidth: pageW - margin * 2 }
@@ -141,7 +141,7 @@ export function downloadTenantCredentialsPdf(input: TenantCredentialsPdfInput) {
   });
   doc.text(`Generated: ${issued}`, margin, y);
 
-  doc.save(`smartone-tenant-access-${slug(input.tenantName)}.pdf`);
+  doc.save(`mali-smart-tenant-access-${slug(input.tenantName)}.pdf`);
 }
 
 export function generateReadablePassword(length = 14) {

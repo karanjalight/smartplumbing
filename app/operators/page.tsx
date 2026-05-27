@@ -25,7 +25,7 @@ export default function OperatorsPage() {
             <span className="text-[#7AB8D9]">Not a fire department.</span>
           </>
         }
-        description="Whether you manage one block in Westlands or two hundred across the Coast, Smart Plumbing collects rent, vends water, dispatches maintenance, and pays landlords — without growing your team."
+        description="Whether you manage one block in Westlands or two hundred across the Coast, Mali Smart collects rent, vends water, dispatches maintenance, and pays landlords — without growing your team."
         ctas={[
           { label: "Bring your portfolio onboard", href: "/sign-up" },
           {

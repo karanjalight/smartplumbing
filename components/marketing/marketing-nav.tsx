@@ -10,24 +10,24 @@ import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
-  { label: "About Us", href: "/trust" },
+  { label: "About Us", href: "/about-us" },
   {
     label: "Services",
     children: [
       { label: "Water Metering", href: "/metering" },
-      { label: "Electricity", href: "/platform" },
-      { label: "Gas Metering", href: "/platform" },
-      { label: "Installation", href: "/platform" },
+      { label: "Electricity", href: "/electricity" },
+      { label: "Gas Metering", href: "/gas-metering" },
+      { label: "Installation", href: "/installation" },
     ],
   },
   {
     label: "Platform",
     children: [
-      { label: "Landlords", href: "/operators" },
-      { label: "Tenants", href: "/residents" },
+      { label: "Landlords", href: "/landlords" },
+      { label: "Tenants", href: "/tenants" },
     ],
   },
-  { label: "Contact Us", href: "/book-demo" },
+  { label: "Contact Us", href: "/contact" },
 ] as const;
 
 /**
@@ -107,21 +107,21 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
               ? "focus-visible:ring-white/50"
               : "focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
           )}
-          aria-label="Smart Plumbing — Home"
+          aria-label="Mali Smart — Home"
         >
           <BrandLogo
             variant="compact"
-            imageClassName="h-9 w-auto sm:h-10"
+            imageClassName="h-24 w-auto sm:h-36 dark:invert"
             withSurface={false}
           />
-          <span
+          {/* <span
             className={cn(
               "hidden text-sm font-semibold tracking-tight sm:inline",
               onDark ? "text-white" : "text-foreground"
             )}
           >
-            Smart Plumbing
-          </span>
+            Mali Smart
+          </span> */}
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">

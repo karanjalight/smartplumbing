@@ -45,7 +45,7 @@ export function HeroSection() {
 
           <FadeUp delay={0.12} className="mx-auto mt-6 max-w-2xl">
             <p className="text-pretty text-base text-muted-foreground sm:text-lg">
-              Smart Plumbing replaces spreadsheets, WhatsApp reconciliations, and
+              Mali Smart replaces spreadsheets, WhatsApp reconciliations, and
               utility headaches with one platform — smart water metering, rent
               collection, WiFi billing, and maintenance, all on M-Pesa.
             </p>
@@ -154,8 +154,8 @@ export function HeroSection() {
         </div>
 
         {/* Logos rail */}
-        <FadeUp delay={0.15} className="mx-auto mt-16 max-w-5xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <FadeUp delay={0.15} className="mx-auto my-16 max-w-5xl text-center">
+          <p className="text-md font-bold uppercase tracking-[0.18em] text-muted-foreground">
             Trusted by property teams across Kenya
           </p>
           <StaggerGroup
@@ -261,7 +261,7 @@ function PeopleStack() {
   return (
     <div
       className="flex -space-x-2"
-      aria-label="Photos of Smart Plumbing customers"
+      aria-label="Photos of Mali Smart customers"
     >
       {HERO_AVATARS.map((avatar, i) => (
         <span

@@ -1,7 +1,7 @@
 import { OnboardMeterView } from "@/components/dashboard/onboard-meter-view";
 
 export const metadata = {
-  title: "Onboard Meter — Smart Plumbing Admin",
+  title: "Onboard Meter — Mali Smart Admin",
   description:
     "Register and provision STS meters, then assign landlord, building, tenant, and unit.",
 };

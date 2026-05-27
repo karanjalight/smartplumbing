@@ -138,12 +138,12 @@ update public.meters m
 -- ---------------------------------------------------------------------------
 insert into public.staff (code, full_name, phone, email, region, status, serves, completed_jobs_90d, notes)
 values
-  ('STF-001', 'James Omondi',     '+254 712 100 201', 'j.omondi@smartplumbing.ke',     'Nairobi County', 'active',   'both',     42, 'Lead plumber — burst pipes, leaks, meter box issues.'),
-  ('STF-002', 'Mary Wanjiku',     '+254 723 200 302', 'm.wanjiku@smartplumbing.ke',    'Nairobi County', 'active',   'tenants',  31, 'DB faults, prepaid meter power paths.'),
-  ('STF-003', 'Peter Kiprotich',  '+254 711 300 403', 'p.kiprotich@smartplumbing.ke',  'Kiambu County',  'active',   'both',     28, 'STS / LONGi field checks with landlords.'),
-  ('STF-004', 'Grace Akinyi',     '+254 734 400 504', 'g.akinyi@smartplumbing.ke',     'Kiambu County',  'on_leave', 'landlords', 0, 'On leave until Apr 15.'),
-  ('STF-005', 'David Mwangi',     '+254 722 500 605', 'd.mwangi@smartplumbing.ke',     'Nakuru County',  'active',   'both',     19, 'Pump rooms, tanks, pressure issues.'),
-  ('STF-006', 'Lucy Chebet',      '+254 700 600 706', 'l.chebet@smartplumbing.ke',     'Nairobi County', 'inactive', 'tenants',   0, 'Former contractor.')
+  ('STF-001', 'James Omondi',     '+254 712 100 201', 'j.omondi@malismart.ke',     'Nairobi County', 'active',   'both',     42, 'Lead plumber — burst pipes, leaks, meter box issues.'),
+  ('STF-002', 'Mary Wanjiku',     '+254 723 200 302', 'm.wanjiku@malismart.ke',    'Nairobi County', 'active',   'tenants',  31, 'DB faults, prepaid meter power paths.'),
+  ('STF-003', 'Peter Kiprotich',  '+254 711 300 403', 'p.kiprotich@malismart.ke',  'Kiambu County',  'active',   'both',     28, 'STS / LONGi field checks with landlords.'),
+  ('STF-004', 'Grace Akinyi',     '+254 734 400 504', 'g.akinyi@malismart.ke',     'Kiambu County',  'on_leave', 'landlords', 0, 'On leave until Apr 15.'),
+  ('STF-005', 'David Mwangi',     '+254 722 500 605', 'd.mwangi@malismart.ke',     'Nakuru County',  'active',   'both',     19, 'Pump rooms, tanks, pressure issues.'),
+  ('STF-006', 'Lucy Chebet',      '+254 700 600 706', 'l.chebet@malismart.ke',     'Nairobi County', 'inactive', 'tenants',   0, 'Former contractor.')
 on conflict (code) do nothing;
 
 insert into public.staff_skills (staff_id, skill)

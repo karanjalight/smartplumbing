@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Notifications — Smart Plumbing Admin",
+  title: "Notifications — Mali Smart Admin",
   description: "Send platform-wide notifications and alerts.",
 };
 

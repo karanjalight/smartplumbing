@@ -6,7 +6,7 @@ import { SignInForm } from "@/components/sign-in-form";
 export const metadata: Metadata = {
   title: "Sign in",
   description:
-    "Access your meters, invoices, and customer records with Smart Plumbing.",
+    "Access your meters, invoices, and customer records with Mali Smart.",
 };
 
 export default function LoginPage() {

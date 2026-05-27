@@ -98,7 +98,7 @@ export async function createLandlordAccount(
     landlord_portal_path: "/landlords/login",
     onboarded_by_profile_id: user.id,
     onboarded_at: onboardedAt,
-    product: "smart_plumbing",
+    product: "mali_smart",
     region_default: region?.trim() || null,
     payout_schedule: payoutSchedule,
   };

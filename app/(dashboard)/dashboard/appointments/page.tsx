@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Appointments — Smart Plumbing",
+  title: "Appointments — Mali Smart",
 };
 
 export default function AppointmentsPage() {

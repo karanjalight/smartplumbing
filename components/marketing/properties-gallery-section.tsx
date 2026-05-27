@@ -18,7 +18,7 @@ export function PropertiesGallerySection() {
           <div className="max-w-2xl">
             <FadeUp>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0A4266] dark:text-[#7AB8D9]">
-                On Smart Plumbing today
+                On Mali Smart today
               </p>
             </FadeUp>
             <FadeUp delay={0.06}>
@@ -31,7 +31,7 @@ export function PropertiesGallerySection() {
             <FadeUp delay={0.12}>
               <p className="mt-5 text-pretty text-base text-muted-foreground sm:text-lg">
                 From single landlords with one block to estates managing
-                hundreds of units, Smart Plumbing runs the day-to-day of
+                hundreds of units, Mali Smart runs the day-to-day of
                 modern Kenyan housing.
               </p>
             </FadeUp>

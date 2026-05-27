@@ -1,5 +1,5 @@
 -- ============================================================================
--- Row Level Security (RLS) — Smart Plumbing
+-- Row Level Security (RLS) — Mali Smart
 --
 -- Roles (stored in public.profiles.role):
 --   admin     -> full read/write everywhere

@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Smart Plumbing Client",
-    short_name: "Smart Client",
-    description: "Client portal for Smart Plumbing water billing and service requests.",
+    name: "Mali Smart",
+    short_name: "Mali Smart",
+    description: "Client portal for Mali Smart water billing and service requests.",
     start_url: "/clients/login",
     scope: "/",
     display: "standalone",

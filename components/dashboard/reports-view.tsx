@@ -131,7 +131,7 @@ export function ReportsView() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#0A4266] dark:text-[#6BB4E8]">Reports</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Cross-cutting operational and financial reporting for Smart Plumbing admin. Data is derived from the same mock
+            Cross-cutting operational and financial reporting for Mali Smart admin. Data is derived from the same mock
             sources as Payments, Payouts, Tokens, and Meters. {DEMO_AS_OF}.
           </p>
         </div>

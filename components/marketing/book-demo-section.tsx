@@ -56,7 +56,7 @@ function DemoStoryPanel() {
       <div className="relative z-10">
         <FadeUp>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7AB8D9]">
-            Smart Plumbing · Kenya
+            Mali Smart · Kenya
           </p>
           <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
             See your buildings running on one platform.

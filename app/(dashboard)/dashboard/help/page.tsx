@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Help Centre — Smart Plumbing",
+  title: "Help Centre — Mali Smart",
 };
 
 export default function HelpPage() {
@@ -9,7 +9,7 @@ export default function HelpPage() {
         Help Centre
       </h1>
       <p className="text-muted-foreground">
-        Find answers, guides, and support for Smart Plumbing.
+        Find answers, guides, and support for Mali Smart.
       </p>
     </div>
   );

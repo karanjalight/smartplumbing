@@ -8,7 +8,7 @@ import { fetchClientTokenHistory } from "@/lib/client-token-history";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "Token history — Smart Plumbing",
+  title: "Token history — Mali Smart",
   description: "Review your water token purchase history.",
 };
 

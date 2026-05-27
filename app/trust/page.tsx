@@ -9,7 +9,7 @@ import { TrustPillarsSection } from "@/components/marketing/trust-pillars-sectio
 export const metadata: Metadata = {
   title: "Trust & Security",
   description:
-    "Smart Plumbing is built like utility infrastructure — SOC-2 ready architecture, end-to-end RLS, daily backups, and M-Pesa Daraja certified flows.",
+    "Mali Smart is built like utility infrastructure — SOC-2 ready architecture, end-to-end RLS, daily backups, and M-Pesa Daraja certified flows.",
 };
 
 export default function TrustPage() {
@@ -24,7 +24,7 @@ export default function TrustPage() {
             <span className="text-[#7AB8D9]">And the water.</span>
           </>
         }
-        description="Smart Plumbing carries rent payments and water credit for thousands of Kenyan households every day. We hold ourselves to the same standard as the utilities we replace."
+        description="Mali Smart carries rent payments and water credit for thousands of Kenyan households every day. We hold ourselves to the same standard as the utilities we replace."
         ctas={[
           { label: "Talk to security", href: "/book-demo" },
           { label: "Read the docs", href: "/platform", variant: "ghost" },

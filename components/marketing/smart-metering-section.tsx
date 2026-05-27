@@ -84,7 +84,7 @@ export function SmartMeteringSection() {
             </FadeUp>
             <FadeUp delay={0.12}>
               <p className="mt-5 text-pretty text-base text-white/75 sm:text-lg">
-                Every meter on Smart Plumbing is connected. Tenants buy water
+                Every meter on Mali Smart is connected. Tenants buy water
                 via M-Pesa and credits land instantly. Landlords get a single
                 statement at the end of the month — and no more disputes.
               </p>

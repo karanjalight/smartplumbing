@@ -321,7 +321,7 @@ export function BookDemoForm() {
           <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
             <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             We respond within one business day (EAT · Nairobi). By submitting, you
-            agree we may contact you about Smart Plumbing.
+            agree we may contact you about Mali Smart.
           </p>
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}

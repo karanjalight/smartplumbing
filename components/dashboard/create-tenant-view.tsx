@@ -533,7 +533,7 @@ export function CreateTenantView({
   }) {
     const origin =
       typeof window !== "undefined" ? window.location.origin : "";
-    const signInUrl = origin ? `${origin}/` : "Your SmartOne home / sign-in URL";
+    const signInUrl = origin ? `${origin}/` : "Your Mali Smart home / sign-in URL";
     const ll = landlords.find((l) => l.id === landlordId);
     downloadTenantCredentialsPdf({
       tenantName: opts.tenantName,

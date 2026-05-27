@@ -6,7 +6,7 @@ import {
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "Client dashboard — Smart Plumbing",
+  title: "Client dashboard — Mali Smart",
   description: "Track bills, rent progress, and payment tasks in one place.",
 };
 

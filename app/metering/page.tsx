@@ -24,7 +24,7 @@ export default function MeteringPage() {
             <span className="text-[#7AB8D9]">Trust the data.</span>
           </>
         }
-        description="Smart Plumbing turns every meter on your estate into a live, audited revenue line — tenants top up on M-Pesa, you settle in one statement."
+        description="Mali Smart turns every meter on your estate into a live, audited revenue line — tenants top up on M-Pesa, you settle in one statement."
         ctas={[
           { label: "Onboard your meters", href: "/sign-up" },
           { label: "Talk to engineering", href: "/book-demo", variant: "ghost" },

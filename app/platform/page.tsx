@@ -25,7 +25,7 @@ export default function PlatformPage() {
             <span className="text-[#7AB8D9]">One platform.</span>
           </>
         }
-        description="From the moment a tenant moves in to the day a landlord cashes out, Smart Plumbing replaces every spreadsheet, group chat, and walk-in collection."
+        description="From the moment a tenant moves in to the day a landlord cashes out, Mali Smart replaces every spreadsheet, group chat, and walk-in collection."
         ctas={[
           { label: "Start with your portfolio", href: "/sign-up" },
           { label: "Sign in", href: "/auth/login", variant: "ghost" },

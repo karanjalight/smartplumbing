@@ -1,7 +1,7 @@
 import { BuildingsView } from "@/components/dashboard/buildings-view";
 
 export const metadata = {
-  title: "Buildings — Smart Plumbing Admin",
+  title: "Buildings — Mali Smart Admin",
   description: "Buildings, units, caretakers, and meters across the portfolio.",
 };
 

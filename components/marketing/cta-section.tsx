@@ -62,7 +62,7 @@ export function CtaSection() {
               <FadeUp delay={0.12}>
                 <p className="mt-5 max-w-2xl text-pretty text-base text-white/75 sm:text-lg">
                   Talk to our team about your buildings, meters, and tenants.
-                  We&apos;ll show you a tailored Smart Plumbing workspace in
+                  We&apos;ll show you a tailored Mali Smart workspace in
                   30 minutes — and have your first property live within a
                   week.
                 </p>

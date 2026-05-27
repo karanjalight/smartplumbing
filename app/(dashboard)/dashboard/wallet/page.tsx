@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Wallet — Smart Plumbing",
+  title: "Wallet — Mali Smart",
 };
 
 export default function WalletPage() {

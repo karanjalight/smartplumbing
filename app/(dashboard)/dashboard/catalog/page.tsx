@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Product Catalog — Smart Plumbing",
+  title: "Product Catalog — Mali Smart",
 };
 
 export default function CatalogPage() {

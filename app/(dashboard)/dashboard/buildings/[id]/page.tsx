@@ -10,14 +10,14 @@ export async function generateMetadata({ params }: Props) {
     const supabase = await getSupabaseServerClient();
     const { data } = await supabase.from("buildings").select("name").eq("id", id).maybeSingle();
     if (data?.name) {
-      return { title: `${data.name} — Buildings — Smart Plumbing Admin` };
+      return { title: `${data.name} — Buildings — Mali Smart Admin` };
     }
   } catch {
     /* env / network */
   }
   const b = getBuildingById(id);
   return {
-    title: b ? `${b.name} — Buildings — Smart Plumbing Admin` : "Building — Smart Plumbing Admin",
+    title: b ? `${b.name} — Buildings — Mali Smart Admin` : "Building — Mali Smart Admin",
   };
 }
 

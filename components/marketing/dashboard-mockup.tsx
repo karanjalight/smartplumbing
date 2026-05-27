@@ -37,7 +37,7 @@ export function DashboardMockup({ className }: { className?: string }) {
         </div>
         <div className="flex h-7 max-w-[260px] flex-1 items-center gap-2 rounded-md border border-border/80 bg-background px-3 text-[11px] text-muted-foreground sm:max-w-[320px]">
           <Search className="size-3.5 shrink-0" aria-hidden />
-          <span className="truncate">app.smartplumbing.co.ke/portfolio</span>
+          <span className="truncate">app.malismart.co.ke/portfolio</span>
         </div>
         <div className="hidden items-center gap-2 sm:flex">
           <div className="size-6 rounded-full bg-gradient-to-br from-[#0A4266] to-[#6BB4E8] text-[10px] font-semibold text-white grid place-items-center">

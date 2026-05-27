@@ -30,4 +30,4 @@ To learn more about Next.js, take a look at the following resources:
 
  Access your meters, invoices, and customer records in one place.
 
-echo "# smartplumbing" >> README.md
+echo "# malismart" >> README.md

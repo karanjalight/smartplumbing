@@ -87,7 +87,7 @@ export function createLandlordHandoffPdfBlob(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
   doc.setTextColor(10, 66, 102);
-  doc.text("Smart Plumbing", margin, y);
+  doc.text("Mali Smart", margin, y);
   y += 28;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
@@ -142,7 +142,7 @@ export function createLandlordHandoffPdfBlob(
   doc.setFontSize(8);
   doc.setTextColor(120, 120, 120);
   doc.text(
-    `Generated ${new Date().toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })} — Smart Plumbing`,
+    `Generated ${new Date().toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })} — Mali Smart`,
     margin,
     y,
   );

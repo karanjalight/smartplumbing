@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Valve Control — Smart Plumbing Admin",
+  title: "Valve Control — Mali Smart Admin",
   description: "Remote valve control for smart meters.",
 };
 

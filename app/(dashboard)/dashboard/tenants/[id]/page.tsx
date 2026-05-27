@@ -25,8 +25,8 @@ export async function generateMetadata({ params }: Props) {
   const tenant = await resolveTenant(id);
   return {
     title: tenant
-      ? `${tenant.name} — Tenant — Smart Plumbing`
-      : "Tenant — Smart Plumbing",
+      ? `${tenant.name} — Tenant — Mali Smart`
+      : "Tenant — Mali Smart",
     description: "Tenant account, STS meter, payments, and landlord context.",
   };
 }

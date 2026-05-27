@@ -6,7 +6,7 @@ import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 export const metadata: Metadata = {
   title: "Book a demo",
   description:
-    "Schedule a 30-minute Smart Plumbing walkthrough — smart water metering, M-Pesa rent, tenant app, and portfolio operations built for Kenyan property teams.",
+    "Schedule a 30-minute Mali Smart walkthrough — smart water metering, M-Pesa rent, tenant app, and portfolio operations built for Kenyan property teams.",
 };
 
 export default function BookDemoPage() {

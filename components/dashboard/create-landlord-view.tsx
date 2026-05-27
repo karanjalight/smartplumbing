@@ -69,7 +69,7 @@ function buildHandoffDocument(h: HandoffState, loginUrl: string): string {
 
   const parts: string[] = [
     "╔════════════════════════════════════════════════════════════════════╗",
-    "║   SMART PLUMBING — Landlord portal welcome kit                   ║",
+    "║   MALI SMART — Landlord portal welcome kit                   ║",
     "╚════════════════════════════════════════════════════════════════════╝",
     "",
     `Hello ${h.fullName},`,
@@ -108,7 +108,7 @@ function buildHandoffDocument(h: HandoffState, loginUrl: string): string {
   parts.push(
     "Please change your password after first sign-in (Settings).",
     "",
-    "— Smart Plumbing",
+    "— Mali Smart",
     `  Generated ${new Date().toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })}`,
   );
 
@@ -171,7 +171,7 @@ export function CreateLandlordView() {
     });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `smart-plumbing-landlord-${handoff.landlordCode}.pdf`;
+    a.download = `mali-smart-landlord-${handoff.landlordCode}.pdf`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast.success("PDF download started");
@@ -334,7 +334,7 @@ export function CreateLandlordView() {
               </Link>
               <div>
                 <p className="text-[0.65rem] font-semibold uppercase tracking-[0.25em] text-sky-200/80 dark:text-[#7dd3fc]/75">
-                  Smart Plumbing
+                  Mali Smart
                 </p>
                 <p className="mt-2 text-xl font-semibold tracking-tight text-white">
                   Landlord account

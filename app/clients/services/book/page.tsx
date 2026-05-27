@@ -2,7 +2,7 @@ import { ClientServiceBookingView } from "@/components/client/client-service-boo
 import { loadClientTenantProfileForPage } from "@/lib/client-tenant-profile";
 
 export const metadata = {
-  title: "Book service — Smart Plumbing",
+  title: "Book service — Mali Smart",
   description: "Book a maintenance service request from your client dashboard.",
 };
 

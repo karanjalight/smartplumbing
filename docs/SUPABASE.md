@@ -1,6 +1,6 @@
 # Supabase backend — setup, schema, and integration guide
 
-This document explains how the SmartOne / Smart Plumbing UI is backed by a
+This document explains how the Mali Smart UI is backed by a
 production-grade Supabase project: schema, row-level security, storage
 buckets, and how the existing `lib/*.ts` mock helpers map onto real tables.
 

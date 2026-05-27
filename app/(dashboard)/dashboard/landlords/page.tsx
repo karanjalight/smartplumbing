@@ -1,7 +1,7 @@
 import { LandlordsView } from "@/components/dashboard/landlords-view";
 
 export const metadata = {
-  title: "Landlords — Smart Plumbing Admin",
+  title: "Landlords — Mali Smart Admin",
   description: "Manage landlords, property managers, properties, and payouts.",
 };
 

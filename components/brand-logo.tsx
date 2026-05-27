@@ -19,9 +19,9 @@ const variantConfig: Record<
   }
 > = {
   compact: {
-    width: 56,
-    height: 56,
-    imageClassName: "h-11 w-11 max-h-11 max-w-11",
+    width: 206,
+    height: 206,
+    imageClassName: "h-48 object cover",
   },
   sidebar: {
     width: 280,

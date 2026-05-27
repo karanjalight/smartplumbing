@@ -1,5 +1,5 @@
 -- ============================================================================
--- Smart Plumbing / SmartOne — Core schema
+-- Mali Smart — Core schema
 -- Aligns with docs/PROJECT_PROPOSAL.md (multi-tenant water billing with STS
 -- prepaid meters via LONGi, M-Pesa/Paystack collections, automated landlord
 -- payouts) and the data shapes used by lib/*.ts in the Next.js app.

@@ -108,7 +108,7 @@ export function TenantExperienceSection() {
             </FadeUp>
             <FadeUp delay={0.12}>
               <p className="mt-5 text-pretty text-base text-muted-foreground sm:text-lg">
-                Smart Plumbing ships an installable progressive web app. No
+                Mali Smart ships an installable progressive web app. No
                 Play Store hurdles, no 80 MB downloads. Tenants get rent,
                 water, WiFi, and maintenance in one place — branded for your
                 estate.

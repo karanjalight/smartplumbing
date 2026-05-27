@@ -95,7 +95,7 @@ export function ModulesSection() {
           <FadeUp delay={0.12}>
             <p className="mt-5 text-pretty text-base text-muted-foreground sm:text-lg">
               From the moment a tenant moves in to the day a landlord cashes
-              out, Smart Plumbing replaces every spreadsheet, group chat, and
+              out, Mali Smart replaces every spreadsheet, group chat, and
               walk-in collection.
             </p>
           </FadeUp>

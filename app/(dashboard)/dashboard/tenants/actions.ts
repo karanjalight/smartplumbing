@@ -423,7 +423,7 @@ export async function createTenantAccount(
     tenant_code: tenantCode,
     tenant_portal_path: "/clients/login",
     landlord_id: scopedLandlordId,
-    product: "smart_plumbing",
+    product: "mali_smart",
   };
 
   const userMetadata: Record<string, Json> = {

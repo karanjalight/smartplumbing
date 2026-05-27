@@ -85,7 +85,7 @@ export function AgencySection() {
           </FadeUp>
           <FadeUp delay={0.12}>
             <p className="mt-5 text-pretty text-base text-muted-foreground sm:text-lg">
-              Property managers running 10 to 10,000 units use Smart Plumbing
+              Property managers running 10 to 10,000 units use Mali Smart
               to collect rent, vend water, dispatch maintenance, and pay
               landlords — without growing the back-office.
             </p>
@@ -132,7 +132,7 @@ export function AgencySection() {
             href="/sign-up"
             className="group inline-flex h-11 items-center justify-center gap-2 rounded-full border border-foreground bg-foreground px-5 text-sm font-semibold text-background transition-all hover:gap-2.5"
           >
-            Bring your portfolio onto Smart Plumbing
+            Bring your portfolio onto Mali Smart
             <ArrowRight
               className="size-4 transition-transform group-hover:translate-x-0.5"
               aria-hidden

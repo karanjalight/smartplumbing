@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Calendar — Smart Plumbing",
+  title: "Calendar — Mali Smart",
 };
 
 export default function CalendarPage() {

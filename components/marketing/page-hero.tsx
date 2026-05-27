@@ -136,7 +136,7 @@ export function PageHero({
               href="/"
               className="rounded-md underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#062538]"
             >
-              Smart Plumbing
+              Mali Smart
             </Link>
             <ChevronRight className="size-3.5 opacity-60" aria-hidden />
             <span className="text-white">{eyebrow}</span>

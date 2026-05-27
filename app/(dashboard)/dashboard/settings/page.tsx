@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Settings — Smart Plumbing",
+  title: "Settings — Mali Smart",
 };
 
 export default function SettingsPage() {
