@@ -605,9 +605,29 @@ export type Database = {
         Update: Partial<PlatformSettingsRow>;
         Relationships: EmptyRelationships;
       };
-      lease_templates:  TableDef<LeaseTemplateRow>;
-      leases:           TableDef<LeaseRow>;
-      lease_signatures: LightTableDef<LeaseSignatureRow>;
+      lease_templates: {
+        Row: LeaseTemplateRow;
+        Insert: Partial<LeaseTemplateRow> & { name: string };
+        Update: Partial<LeaseTemplateRow>;
+        Relationships: EmptyRelationships;
+      };
+      leases: {
+        Row: LeaseRow;
+        Insert: Partial<LeaseRow> & { landlord_id: string; tenant_id: string };
+        Update: Partial<LeaseRow>;
+        Relationships: EmptyRelationships;
+      };
+      lease_signatures: {
+        Row: LeaseSignatureRow;
+        Insert: Partial<LeaseSignatureRow> & {
+          lease_id: string;
+          signer_role: LeaseSignerRole;
+          signer_name: string;
+          signature_path: string;
+        };
+        Update: Partial<LeaseSignatureRow>;
+        Relationships: EmptyRelationships;
+      };
     };
     Views: {
       tenant_directory: ViewDef<
