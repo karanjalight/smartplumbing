@@ -459,6 +459,68 @@ export type PlatformSettingsRow = {
   updated_at: string;
 }
 
+// ---------- Leases -------------------------------------------------------
+
+export type LeaseStatus =
+  | "draft"
+  | "pending_signature"
+  | "active"
+  | "expired"
+  | "terminated"
+  | "cancelled";
+export type LeaseSignerRole = "tenant" | "landlord";
+
+export type LeaseTemplateRow = Timestamps & {
+  id: string;
+  landlord_id: string | null;
+  name: string;
+  description: string | null;
+  clauses: Json;
+  governing_law: string;
+  is_active: boolean;
+  version: number;
+};
+
+export type LeaseRow = Timestamps & {
+  id: string;
+  code: string | null;
+  landlord_id: string;
+  tenant_id: string;
+  building_id: string | null;
+  unit_id: string | null;
+  template_id: string | null;
+  landlord_name: string | null;
+  tenant_name: string | null;
+  tenant_national_id: string | null;
+  property_label: string | null;
+  rent_kes: number | null;
+  deposit_kes: number | null;
+  frequency: string;
+  payment_day: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  clause_overrides: Json;
+  status: LeaseStatus;
+  document_url: string | null;
+  signed_document_url: string | null;
+  signed_at: string | null;
+  terminated_at: string | null;
+  termination_reason: string | null;
+  notes: string | null;
+};
+
+export type LeaseSignatureRow = {
+  id: string;
+  lease_id: string;
+  signer_profile_id: string | null;
+  signer_role: LeaseSignerRole;
+  signer_name: string;
+  signature_path: string;
+  signed_at: string;
+  signer_ip: string | null;
+  user_agent: string | null;
+};
+
 // ---------- Helper insert/update types -----------------------------------
 
 type Insertable<T> = Omit<T, "created_at" | "updated_at"> & {
@@ -543,6 +605,9 @@ export type Database = {
         Update: Partial<PlatformSettingsRow>;
         Relationships: EmptyRelationships;
       };
+      lease_templates:  TableDef<LeaseTemplateRow>;
+      leases:           TableDef<LeaseRow>;
+      lease_signatures: LightTableDef<LeaseSignatureRow>;
     };
     Views: {
       tenant_directory: ViewDef<
@@ -571,6 +636,7 @@ export type Database = {
       is_landlord: { Args: Record<string, never>; Returns: boolean };
       is_tenant: { Args: Record<string, never>; Returns: boolean };
       is_staff: { Args: Record<string, never>; Returns: boolean };
+      next_lease_code: { Args: Record<string, never>; Returns: string };
     };
     Enums: {
       user_role: UserRole;
@@ -597,6 +663,8 @@ export type Database = {
       order_status: OrderStatus;
       notification_category: NotificationCategory;
       notification_severity: NotificationSeverity;
+      lease_status: LeaseStatus;
+      lease_signer_role: LeaseSignerRole;
     };
   };
 };
