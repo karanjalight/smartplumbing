@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { TenantDetailView } from "@/components/dashboard/tenant-detail-view";
+import { getActiveLeaseForTenant } from "@/lib/leases/queries";
 import {
   fetchTenantDetailById,
   getTenantById,
@@ -20,6 +22,15 @@ async function resolveTenant(id: string) {
   return getTenantById(id);
 }
 
+async function resolveActiveLease(id: string) {
+  try {
+    const supabase = await getSupabaseServerClient();
+    return await getActiveLeaseForTenant(supabase, id);
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const tenant = await resolveTenant(id);
@@ -35,5 +46,20 @@ export default async function TenantDetailPage({ params }: Props) {
   const { id } = await params;
   const tenant = await resolveTenant(id);
   if (!tenant) notFound();
-  return <TenantDetailView tenant={tenant} />;
+  const lease = await resolveActiveLease(id);
+  return (
+    <>
+      {lease && (
+        <div className="px-6 pt-4">
+          <Link
+            href={`/dashboard/leases/${lease.id}`}
+            className="text-sm underline"
+          >
+            View lease {lease.code} ({lease.status})
+          </Link>
+        </div>
+      )}
+      <TenantDetailView tenant={tenant} />
+    </>
+  );
 }
