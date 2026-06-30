@@ -559,6 +559,25 @@ export type LedgerEntryRow = Timestamps & {
   created_by: string | null;
 };
 
+export type OwnerExpenseCategory =
+  | "maintenance"
+  | "repairs"
+  | "utilities"
+  | "management"
+  | "insurance"
+  | "other";
+
+export type OwnerExpenseRow = Timestamps & {
+  id: string;
+  landlord_id: string;
+  building_id: string | null;
+  category: OwnerExpenseCategory;
+  amount_kes: number;
+  description: string | null;
+  incurred_on: string;
+  created_by: string | null;
+};
+
 // ---------- Helper insert/update types -----------------------------------
 
 type Insertable<T> = Omit<T, "created_at" | "updated_at"> & {
@@ -678,6 +697,15 @@ export type Database = {
         Update: Partial<LedgerEntryRow>;
         Relationships: EmptyRelationships;
       };
+      owner_expenses: {
+        Row: OwnerExpenseRow;
+        Insert: Partial<OwnerExpenseRow> & {
+          landlord_id: string;
+          amount_kes: number;
+        };
+        Update: Partial<OwnerExpenseRow>;
+        Relationships: EmptyRelationships;
+      };
     };
     Views: {
       tenant_directory: ViewDef<
@@ -739,6 +767,7 @@ export type Database = {
       ledger_direction: LedgerDirection;
       ledger_category: LedgerCategory;
       ledger_source: LedgerSource;
+      owner_expense_category: OwnerExpenseCategory;
     };
   };
 };
