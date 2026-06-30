@@ -521,6 +521,44 @@ export type LeaseSignatureRow = {
   user_agent: string | null;
 };
 
+// ---------- Ledger / billing ---------------------------------------------
+
+export type LedgerDirection = "debit" | "credit";
+export type LedgerCategory =
+  | "rent"
+  | "deposit"
+  | "water"
+  | "service_charge"
+  | "late_fee"
+  | "payment"
+  | "adjustment"
+  | "refund";
+export type LedgerSource =
+  | "manual"
+  | "rent_run"
+  | "mpesa"
+  | "paystack"
+  | "token"
+  | "system";
+
+export type LedgerEntryRow = Timestamps & {
+  id: string;
+  tenant_id: string;
+  lease_id: string | null;
+  landlord_id: string;
+  direction: LedgerDirection;
+  category: LedgerCategory;
+  amount_kes: number;
+  description: string | null;
+  period: string | null;
+  due_date: string | null;
+  source: LedgerSource;
+  reference: string | null;
+  payment_id: string | null;
+  voided: boolean;
+  created_by: string | null;
+};
+
 // ---------- Helper insert/update types -----------------------------------
 
 type Insertable<T> = Omit<T, "created_at" | "updated_at"> & {
@@ -628,6 +666,18 @@ export type Database = {
         Update: Partial<LeaseSignatureRow>;
         Relationships: EmptyRelationships;
       };
+      ledger_entries: {
+        Row: LedgerEntryRow;
+        Insert: Partial<LedgerEntryRow> & {
+          tenant_id: string;
+          landlord_id: string;
+          direction: LedgerDirection;
+          category: LedgerCategory;
+          amount_kes: number;
+        };
+        Update: Partial<LedgerEntryRow>;
+        Relationships: EmptyRelationships;
+      };
     };
     Views: {
       tenant_directory: ViewDef<
@@ -657,6 +707,7 @@ export type Database = {
       is_tenant: { Args: Record<string, never>; Returns: boolean };
       is_staff: { Args: Record<string, never>; Returns: boolean };
       next_lease_code: { Args: Record<string, never>; Returns: string };
+      tenant_balance_kes: { Args: { p_tenant_id: string }; Returns: number };
     };
     Enums: {
       user_role: UserRole;
@@ -685,6 +736,9 @@ export type Database = {
       notification_severity: NotificationSeverity;
       lease_status: LeaseStatus;
       lease_signer_role: LeaseSignerRole;
+      ledger_direction: LedgerDirection;
+      ledger_category: LedgerCategory;
+      ledger_source: LedgerSource;
     };
   };
 };
