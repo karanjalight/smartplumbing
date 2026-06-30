@@ -615,7 +615,12 @@ export type Database = {
       landlords:          TableDef<LandlordRow>;
       buildings:          TableDef<BuildingRow>;
       building_recurring_bills: TableDef<BuildingRecurringBillRow>;
-      units:              TableDef<UnitRow>;
+      units: {
+        Row: UnitRow;
+        Insert: Partial<UnitRow> & { building_id: string; label: string };
+        Update: Partial<UnitRow>;
+        Relationships: EmptyRelationships;
+      };
       water_pricing:      TableDef<WaterPricingRow>;
       meters:             TableDef<MeterRow>;
       tenants:            TableDef<TenantRow>;

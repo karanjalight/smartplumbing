@@ -336,3 +336,146 @@ export async function createBuildingWithUnits(
 
   return { ok: true, buildingId };
 }
+
+// ---------- Edit an existing building & its houses ------------------------
+
+export type BuildingActionResult = { ok: true } | { ok: false; error: string };
+
+const updateBuildingInput = z.object({
+  buildingId: z.string().uuid(),
+  name: z.string().min(1, "Building name is required."),
+  addressLine: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  region: z.string().nullable().optional(),
+  caretakerName: z.string().nullable().optional(),
+  caretakerPhone: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  rentKes: z.number().nonnegative().optional(),
+  managementFeePct: z.number().min(0).max(100).nullable().optional(),
+});
+
+/** Updates a building's details. RLS limits this to admins and the owner. */
+export async function updateBuilding(input: unknown): Promise<BuildingActionResult> {
+  const parsed = updateBuildingInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const patch = {
+    name: d.name.trim(),
+    address_line: d.addressLine?.trim() || null,
+    city: d.city?.trim() || null,
+    region: d.region?.trim() || null,
+    caretaker_name: d.caretakerName?.trim() || null,
+    caretaker_phone: d.caretakerPhone?.trim() || null,
+    notes: d.notes?.trim() || null,
+    ...(d.rentKes !== undefined ? { rent_kes: d.rentKes } : {}),
+    ...(d.managementFeePct !== undefined ? { management_fee_pct: d.managementFeePct } : {}),
+  };
+  const { error } = await supabase.from("buildings").update(patch).eq("id", d.buildingId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+const addHouseInput = z.object({
+  buildingId: z.string().uuid(),
+  label: z.string().min(1, "House label is required."),
+  rentKes: z.number().nonnegative().nullable().optional(),
+  description: z.string().nullable().optional(),
+});
+
+/** Adds a single house (unit) to an existing building and bumps house_count. */
+export async function addHouseToBuilding(input: unknown): Promise<BuildingActionResult> {
+  const parsed = addHouseInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const { data: building } = await supabase
+    .from("buildings").select("id, house_count").eq("id", d.buildingId).maybeSingle();
+  if (!building) return { ok: false, error: "Building not found." };
+
+  const label = d.label.trim();
+  const { data: existing } = await supabase
+    .from("units").select("id").eq("building_id", d.buildingId).ilike("label", label);
+  if (existing && existing.length > 0) {
+    return { ok: false, error: `A house labelled "${label}" already exists.` };
+  }
+
+  const { error } = await supabase.from("units").insert({
+    building_id: d.buildingId,
+    label,
+    description: d.description?.trim() || null,
+    rent_kes: d.rentKes ?? null,
+    is_vacant: true,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await supabase
+    .from("buildings")
+    .update({ house_count: (building.house_count ?? 0) + 1 })
+    .eq("id", d.buildingId);
+  return { ok: true };
+}
+
+const updateUnitInput = z.object({
+  unitId: z.string().uuid(),
+  label: z.string().min(1).optional(),
+  rentKes: z.number().nonnegative().nullable().optional(),
+  description: z.string().nullable().optional(),
+  isVacant: z.boolean().optional(),
+});
+
+/** Edits a single house (unit). */
+export async function updateUnit(input: unknown): Promise<BuildingActionResult> {
+  const parsed = updateUnitInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const patch = {
+    ...(d.label !== undefined ? { label: d.label.trim() } : {}),
+    ...(d.rentKes !== undefined ? { rent_kes: d.rentKes } : {}),
+    ...(d.description !== undefined ? { description: d.description?.trim() || null } : {}),
+    ...(d.isVacant !== undefined ? { is_vacant: d.isVacant } : {}),
+  };
+  const { error } = await supabase.from("units").update(patch).eq("id", d.unitId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Removes a house (unit) and recounts the building's house_count. */
+export async function deleteUnit(unitId: string): Promise<BuildingActionResult> {
+  if (typeof unitId !== "string" || !/^[0-9a-f-]{36}$/i.test(unitId)) {
+    return { ok: false, error: "Invalid house." };
+  }
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const { data: unit } = await supabase
+    .from("units").select("building_id").eq("id", unitId).maybeSingle();
+  if (!unit) return { ok: false, error: "House not found." };
+
+  const { error } = await supabase.from("units").delete().eq("id", unitId);
+  if (error) return { ok: false, error: error.message };
+
+  const { count } = await supabase
+    .from("units").select("id", { count: "exact", head: true })
+    .eq("building_id", unit.building_id);
+  await supabase
+    .from("buildings").update({ house_count: count ?? 0 }).eq("id", unit.building_id);
+  return { ok: true };
+}
