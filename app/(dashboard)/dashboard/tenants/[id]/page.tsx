@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { TenantLedger } from "@/components/billing/tenant-ledger";
 import { TenantDetailView } from "@/components/dashboard/tenant-detail-view";
+import { buildStatement, listLedgerForTenant, type Statement } from "@/lib/billing/queries";
 import { getActiveLeaseForTenant } from "@/lib/leases/queries";
 import {
   fetchTenantDetailById,
@@ -31,6 +33,16 @@ async function resolveActiveLease(id: string) {
   }
 }
 
+async function resolveStatement(id: string): Promise<Statement | null> {
+  try {
+    const supabase = await getSupabaseServerClient();
+    const entries = await listLedgerForTenant(supabase, id);
+    return buildStatement(entries, new Date());
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const tenant = await resolveTenant(id);
@@ -47,6 +59,7 @@ export default async function TenantDetailPage({ params }: Props) {
   const tenant = await resolveTenant(id);
   if (!tenant) notFound();
   const lease = await resolveActiveLease(id);
+  const statement = await resolveStatement(id);
   return (
     <>
       {lease && (
@@ -60,6 +73,14 @@ export default async function TenantDetailPage({ params }: Props) {
         </div>
       )}
       <TenantDetailView tenant={tenant} />
+      {statement && (
+        <section className="space-y-4 p-4 md:p-6">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Billing &amp; ledger
+          </h2>
+          <TenantLedger tenantId={id} leaseId={lease?.id} statement={statement} />
+        </section>
+      )}
     </>
   );
 }
