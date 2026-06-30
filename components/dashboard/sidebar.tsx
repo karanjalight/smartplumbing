@@ -56,6 +56,7 @@ const menuGroups: MenuGroup[] = [
       { href: "/dashboard/landlords", label: "Landlords", icon: Briefcase },
       { href: "/dashboard/buildings", label: "Buildings", icon: Layers },
       { href: "/dashboard/tenants", label: "Tenants", icon: Users },
+      { href: "/dashboard/leases", label: "Leases", icon: ScrollText },
       { href: "/dashboard/staff", label: "Staff", icon: UserCog },
     ],
   },

@@ -86,6 +86,7 @@ export async function POST(
     if (img) {
       stamps.push({
         role: s.signer_role,
+        name: s.signer_name,
         pngBytes: new Uint8Array(await img.arrayBuffer()),
         signedAt: s.signed_at,
       });
