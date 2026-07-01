@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { HouseUnitRow } from "@/lib/buildings-data";
+import { UNIT_TYPE_LABEL, UNIT_TYPE_ORDER } from "@/lib/units/labels";
+import type { UnitType } from "@/lib/supabase/types";
 
 type Props = {
   open: boolean;
@@ -29,6 +31,7 @@ export function HouseDialog({
   const [label, setLabel] = useState("");
   const [rent, setRent] = useState("");
   const [description, setDescription] = useState("");
+  const [unitType, setUnitType] = useState<UnitType | "">("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -41,6 +44,7 @@ export function HouseDialog({
         : defaultRent ? String(defaultRent) : ""
     );
     setDescription(house?.description ?? "");
+    setUnitType(house?.unitType ?? "");
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, house, defaultRent]);
 
@@ -52,8 +56,8 @@ export function HouseDialog({
     const rentValue = rent.trim() === "" ? null : Number(rent);
     setBusy(true);
     const res = editing
-      ? await updateUnit({ unitId: house!.id, label: trimmed, rentKes: rentValue, description: description || null })
-      : await addHouseToBuilding({ buildingId, label: trimmed, rentKes: rentValue, description: description || null });
+      ? await updateUnit({ unitId: house!.id, label: trimmed, rentKes: rentValue, description: description || null, unitType: unitType || null })
+      : await addHouseToBuilding({ buildingId, label: trimmed, rentKes: rentValue, description: description || null, unitType: unitType || null });
     setBusy(false);
     if (res.ok) { toast.success(editing ? "House updated" : "House added"); onSaved(); onClose(); }
     else toast.error(res.error);
@@ -86,6 +90,17 @@ export function HouseDialog({
             <Label htmlFor="h-label">House label *</Label>
             <Input id="h-label" value={label} onChange={(e) => setLabel(e.target.value)}
               className="rounded-lg" placeholder="e.g. Block A · Unit 4" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="h-type">House type</Label>
+            <select id="h-type" value={unitType}
+              onChange={(e) => setUnitType(e.target.value as UnitType | "")}
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30">
+              <option value="">Unspecified</option>
+              {UNIT_TYPE_ORDER.map((t) => (
+                <option key={t} value={t}>{UNIT_TYPE_LABEL[t]}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="h-rent">Monthly rent (KES)</Label>

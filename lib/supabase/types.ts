@@ -157,6 +157,18 @@ export type BuildingRecurringBillRow = Timestamps & {
   notes: string | null;
 };
 
+export type UnitType =
+  | "bedsitter"
+  | "studio"
+  | "one_bedroom"
+  | "two_bedroom"
+  | "three_bedroom"
+  | "four_bedroom"
+  | "five_bedroom"
+  | "six_bedroom"
+  | "seven_bedroom"
+  | "eight_bedroom";
+
 export type UnitRow = Timestamps & {
   id: string;
   code: string | null;
@@ -165,6 +177,15 @@ export type UnitRow = Timestamps & {
   description: string | null;
   rent_kes: number | null;
   is_vacant: boolean;
+  unit_type: UnitType | null;
+}
+
+export type UnitImageRow = {
+  id: string;
+  unit_id: string;
+  path: string;
+  sort_order: number;
+  created_at: string;
 }
 
 export type WaterPricingRow = Timestamps & {
@@ -621,6 +642,12 @@ export type Database = {
         Update: Partial<UnitRow>;
         Relationships: EmptyRelationships;
       };
+      unit_images: {
+        Row: UnitImageRow;
+        Insert: Partial<UnitImageRow> & { unit_id: string; path: string };
+        Update: Partial<UnitImageRow>;
+        Relationships: EmptyRelationships;
+      };
       water_pricing:      TableDef<WaterPricingRow>;
       meters:             TableDef<MeterRow>;
       tenants:            TableDef<TenantRow>;
@@ -750,6 +777,7 @@ export type Database = {
       payout_schedule: PayoutSchedule;
       payout_rail: PayoutRail;
       rent_model: RentModel;
+      unit_type: UnitType;
       meter_lifecycle: MeterLifecycle;
       meter_connectivity: MeterConnectivity;
       meter_model_type: MeterModelType;

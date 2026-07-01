@@ -381,11 +381,17 @@ export async function updateBuilding(input: unknown): Promise<BuildingActionResu
   return { ok: true };
 }
 
+const UNIT_TYPES = [
+  "bedsitter", "studio", "one_bedroom", "two_bedroom", "three_bedroom",
+  "four_bedroom", "five_bedroom", "six_bedroom", "seven_bedroom", "eight_bedroom",
+] as const;
+
 const addHouseInput = z.object({
   buildingId: z.string().uuid(),
   label: z.string().min(1, "House label is required."),
   rentKes: z.number().nonnegative().nullable().optional(),
   description: z.string().nullable().optional(),
+  unitType: z.enum(UNIT_TYPES).nullable().optional(),
 });
 
 /** Adds a single house (unit) to an existing building and bumps house_count. */
@@ -415,6 +421,7 @@ export async function addHouseToBuilding(input: unknown): Promise<BuildingAction
     label,
     description: d.description?.trim() || null,
     rent_kes: d.rentKes ?? null,
+    unit_type: d.unitType ?? null,
     is_vacant: true,
   });
   if (error) return { ok: false, error: error.message };
@@ -432,6 +439,7 @@ const updateUnitInput = z.object({
   rentKes: z.number().nonnegative().nullable().optional(),
   description: z.string().nullable().optional(),
   isVacant: z.boolean().optional(),
+  unitType: z.enum(UNIT_TYPES).nullable().optional(),
 });
 
 /** Edits a single house (unit). */
@@ -450,6 +458,7 @@ export async function updateUnit(input: unknown): Promise<BuildingActionResult> 
     ...(d.rentKes !== undefined ? { rent_kes: d.rentKes } : {}),
     ...(d.description !== undefined ? { description: d.description?.trim() || null } : {}),
     ...(d.isVacant !== undefined ? { is_vacant: d.isVacant } : {}),
+    ...(d.unitType !== undefined ? { unit_type: d.unitType } : {}),
   };
   const { error } = await supabase.from("units").update(patch).eq("id", d.unitId);
   if (error) return { ok: false, error: error.message };

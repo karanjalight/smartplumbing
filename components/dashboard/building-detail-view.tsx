@@ -37,6 +37,7 @@ import {
   getMergedHousesForBuildingWithTenantAssignments,
   readStore,
 } from "@/lib/landlord-portfolio-storage";
+import { unitTypeLabel } from "@/lib/units/labels";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -296,6 +297,8 @@ export function BuildingDetailView({
 
   const tenantHrefBase =
     portal === "landlord" ? "/landlords/dashboard/tenants" : "/dashboard/tenants";
+  const unitHrefBase =
+    portal === "landlord" ? "/landlords/dashboard/units" : "/dashboard/units";
 
   const showLandlordLocalActions =
     portal === "landlord" && landlordPortalId && !isLiveDetail;
@@ -460,6 +463,7 @@ export function BuildingDetailView({
             <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-border/80">
               <tr>
                 <th className="px-4 py-3">Unit</th>
+                <th className="hidden px-4 py-3 sm:table-cell">Type</th>
                 <th className="px-4 py-3">Rent / mo</th>
                 <th className="hidden px-4 py-3 md:table-cell">Tenant</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Meter (STS)</th>
@@ -473,7 +477,21 @@ export function BuildingDetailView({
                   key={h.id}
                   className="bg-card transition-colors hover:bg-muted/30 dark:hover:bg-muted/15"
                 >
-                  <td className="px-4 py-3 font-medium text-foreground">{h.label}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    {isLiveDetail ? (
+                      <Link
+                        href={`${unitHrefBase}/${encodeURIComponent(h.id)}`}
+                        className="text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
+                      >
+                        {h.label}
+                      </Link>
+                    ) : (
+                      h.label
+                    )}
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                    {unitTypeLabel(h.unitType)}
+                  </td>
                   <td className="px-4 py-3 tabular-nums text-foreground">
                     {unitRentDisplay(h)}
                   </td>
