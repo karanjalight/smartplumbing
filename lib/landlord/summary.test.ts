@@ -62,6 +62,19 @@ describe("summarizeCollections", () => {
     expect(r.lastMonthKes).toBe(0);
     expect(r.deltaPct).toBeNull();
   });
+
+  it("buckets a prior-year December payment into the Dec slot when now is January", () => {
+    const r = summarizeCollections(
+      [{ amount_kes: 300, created_at: "2025-12-10T09:00:00Z", status: "completed" }],
+      new Date("2026-01-15T00:00:00Z"),
+      6,
+    );
+    expect(r.series).toHaveLength(6);
+    expect(r.series[r.series.length - 1]).toEqual({ month: "Jan", amount: 0 });
+    expect(r.series[r.series.length - 2]).toEqual({ month: "Dec", amount: 300 });
+    expect(r.thisMonthKes).toBe(0);
+    expect(r.lastMonthKes).toBe(300);
+  });
 });
 
 function notif(over: Partial<NotificationRow>): NotificationRow {
@@ -89,6 +102,17 @@ describe("toAlertPreviewItems", () => {
       { id: "c", title: "Leak", detail: "", kind: "leak" },
       { id: "d", title: "Payout", detail: "window open", kind: "payment" },
       { id: "e", title: "Sys", detail: "digest", kind: "meter" },
+    ]);
+  });
+
+  it("maps tenant and token categories to the payment kind", () => {
+    const items = toAlertPreviewItems([
+      notif({ id: "t", category: "tenant", title: "Tenant", description: "arrears" }),
+      notif({ id: "k", category: "token", title: "Token", description: "low" }),
+    ]);
+    expect(items).toEqual([
+      { id: "t", title: "Tenant", detail: "arrears", kind: "payment" },
+      { id: "k", title: "Token", detail: "low", kind: "payment" },
     ]);
   });
 });

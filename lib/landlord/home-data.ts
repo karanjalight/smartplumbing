@@ -26,7 +26,7 @@ export async function loadLandlordHome(
   const [buildingsRes, tenantsRes, metersRes, payments, notifications] = await Promise.all([
     client.from("buildings").select("id").eq("landlord_id", landlordId),
     client.from("tenants").select("id, status").eq("landlord_id", landlordId),
-    client.from("meters").select("id, connectivity_status"),
+    client.from("meters").select("id, connectivity_status").eq("landlord_id", landlordId),
     listPayments(client, { landlordId, fromIso: sixMonthsAgoIso(now) }),
     user
       ? listNotifications(client, { recipientProfileId: user.id, onlyUnread: true, limit: 5 })
