@@ -7,12 +7,19 @@ import { z } from "zod";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { RecurringBillFrequency, RentModel } from "@/lib/supabase/types";
 
+const UNIT_TYPE_VALUES = [
+  "bedsitter", "studio", "one_bedroom", "two_bedroom", "three_bedroom",
+  "four_bedroom", "five_bedroom", "six_bedroom", "seven_bedroom", "eight_bedroom",
+] as const;
+
 const unitInput = z.object({
   label: z.string().min(1, "Each house needs a label."),
   /** When null and sameRentAll, inherits building rent. */
   rentKes: z.number().nonnegative().nullable().optional(),
   /** Optional meter to assign to this unit after creation. */
   meterId: z.string().uuid().nullable().optional(),
+  /** Optional house classification (bedsitter / studio / N-bedroom). */
+  unitType: z.enum(UNIT_TYPE_VALUES).nullable().optional(),
 });
 
 const recurringBillInput = z.object({
@@ -205,6 +212,7 @@ export async function createBuildingWithUnits(
     label: u.label.trim(),
     description: null as string | null,
     rent_kes: data.sameRentAll ? null : (u.rentKes ?? null),
+    unit_type: u.unitType ?? null,
     is_vacant: true,
   }));
 
@@ -381,17 +389,12 @@ export async function updateBuilding(input: unknown): Promise<BuildingActionResu
   return { ok: true };
 }
 
-const UNIT_TYPES = [
-  "bedsitter", "studio", "one_bedroom", "two_bedroom", "three_bedroom",
-  "four_bedroom", "five_bedroom", "six_bedroom", "seven_bedroom", "eight_bedroom",
-] as const;
-
 const addHouseInput = z.object({
   buildingId: z.string().uuid(),
   label: z.string().min(1, "House label is required."),
   rentKes: z.number().nonnegative().nullable().optional(),
   description: z.string().nullable().optional(),
-  unitType: z.enum(UNIT_TYPES).nullable().optional(),
+  unitType: z.enum(UNIT_TYPE_VALUES).nullable().optional(),
 });
 
 /** Adds a single house (unit) to an existing building and bumps house_count. */
@@ -439,7 +442,7 @@ const updateUnitInput = z.object({
   rentKes: z.number().nonnegative().nullable().optional(),
   description: z.string().nullable().optional(),
   isVacant: z.boolean().optional(),
-  unitType: z.enum(UNIT_TYPES).nullable().optional(),
+  unitType: z.enum(UNIT_TYPE_VALUES).nullable().optional(),
 });
 
 /** Edits a single house (unit). */
