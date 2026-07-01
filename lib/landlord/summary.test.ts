@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { summarizePortfolio, summarizeCollections } from "@/lib/landlord/summary";
+import { summarizePortfolio, summarizeCollections, toAlertPreviewItems } from "@/lib/landlord/summary";
+import type { NotificationRow } from "@/lib/supabase/types";
 
 describe("summarizePortfolio", () => {
   it("counts buildings, units, meters (online), and tenants (active)", () => {
@@ -60,5 +61,34 @@ describe("summarizeCollections", () => {
     expect(r.thisMonthKes).toBe(100);
     expect(r.lastMonthKes).toBe(0);
     expect(r.deltaPct).toBeNull();
+  });
+});
+
+function notif(over: Partial<NotificationRow>): NotificationRow {
+  return {
+    id: "n1", recipient_profile_id: "p1", category: "system", severity: "info",
+    title: "T", description: null, href: null, related_meter_id: null,
+    related_tenant_id: null, related_payment_id: null, related_order_id: null,
+    related_payout_id: null, metadata: null, read_at: null, dismissed_at: null,
+    created_at: "2026-07-01T00:00:00Z", ...over,
+  };
+}
+
+describe("toAlertPreviewItems", () => {
+  it("maps notification categories to preview kinds and carries description", () => {
+    const items = toAlertPreviewItems([
+      notif({ id: "a", category: "meter", title: "Meter", description: "night flow" }),
+      notif({ id: "b", category: "payment", title: "Pay", description: "M-Pesa failed" }),
+      notif({ id: "c", category: "leak", title: "Leak", description: null }),
+      notif({ id: "d", category: "payout", title: "Payout", description: "window open" }),
+      notif({ id: "e", category: "system", title: "Sys", description: "digest" }),
+    ]);
+    expect(items).toEqual([
+      { id: "a", title: "Meter", detail: "night flow", kind: "meter" },
+      { id: "b", title: "Pay", detail: "M-Pesa failed", kind: "payment" },
+      { id: "c", title: "Leak", detail: "", kind: "leak" },
+      { id: "d", title: "Payout", detail: "window open", kind: "payment" },
+      { id: "e", title: "Sys", detail: "digest", kind: "meter" },
+    ]);
   });
 });

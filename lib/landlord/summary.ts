@@ -1,4 +1,4 @@
-import type { PaymentStatus } from "@/lib/supabase/types";
+import type { PaymentStatus, NotificationRow } from "@/lib/supabase/types";
 
 export type PortfolioCounts = {
   buildings: number;
@@ -65,4 +65,20 @@ export function summarizeCollections(
     lastMonthKes === 0 ? null : ((thisMonthKes - lastMonthKes) / lastMonthKes) * 100;
 
   return { series, thisMonthKes, lastMonthKes, deltaPct };
+}
+
+export type AlertPreviewItem = {
+  id: string;
+  title: string;
+  detail: string;
+  kind: "meter" | "payment" | "leak";
+};
+
+export function toAlertPreviewItems(rows: NotificationRow[]): AlertPreviewItem[] {
+  return rows.map((r) => {
+    let kind: AlertPreviewItem["kind"] = "meter";
+    if (r.category === "leak") kind = "leak";
+    else if (["payment", "payout", "tenant", "token"].includes(r.category)) kind = "payment";
+    return { id: r.id, title: r.title, detail: r.description ?? "", kind };
+  });
 }
