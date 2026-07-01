@@ -1,4 +1,6 @@
 import { LandlordPortalHome } from "@/components/landlord/landlord-portal-home";
+import { loadLandlordHome } from "@/lib/landlord/home-data";
+import { requireLandlord } from "@/lib/landlord/server";
 
 export const metadata = {
   title: "Landlord dashboard — Mali Smart",
@@ -6,6 +8,8 @@ export const metadata = {
     "Overview of properties, tenants, billing, and alerts for property managers.",
 };
 
-export default function LandlordDashboardPage() {
-  return <LandlordPortalHome />;
+export default async function LandlordDashboardPage() {
+  const { supabase, landlordId } = await requireLandlord();
+  const data = await loadLandlordHome(supabase, landlordId, new Date());
+  return <LandlordPortalHome data={data} />;
 }

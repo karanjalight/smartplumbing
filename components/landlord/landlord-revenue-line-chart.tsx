@@ -2,26 +2,11 @@
 
 import { useSyncExternalStore } from "react";
 import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
+import type { MonthlyCollection } from "@/lib/landlord/summary";
 import { formatKes } from "@/lib/tenants-data";
-
-/** Mock monthly collections (KES) — replace with API data when available. */
-const MONTHLY_COLLECTIONS = [
-  { month: "Jul", amount: 198_000 },
-  { month: "Aug", amount: 224_000 },
-  { month: "Sep", amount: 251_000 },
-  { month: "Oct", amount: 238_000 },
-  { month: "Nov", amount: 269_000 },
-  { month: "Dec", amount: 284_000 },
-];
 
 const subscribe = () => () => {};
 
@@ -31,7 +16,7 @@ function kesTick(n: number) {
   return String(n);
 }
 
-export function LandlordRevenueLineChart() {
+export function LandlordRevenueLineChart({ data }: { data: MonthlyCollection[] }) {
   const isMounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!isMounted) {
@@ -42,11 +27,9 @@ export function LandlordRevenueLineChart() {
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm dark:border-border/80 sm:p-5">
       <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-foreground">
-            Collections over time
-          </h2>
+          <h2 className="text-base font-semibold text-foreground">Collections over time</h2>
           <p className="text-sm text-muted-foreground">
-            M-Pesa and prepaid water revenue by month (mock data).
+            M-Pesa and prepaid water revenue by month.
           </p>
         </div>
       </div>
@@ -56,7 +39,7 @@ export function LandlordRevenueLineChart() {
         aria-label="Line chart of monthly collections in Kenyan shillings"
       >
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={MONTHLY_COLLECTIONS} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
             <XAxis
               dataKey="month"
@@ -66,17 +49,10 @@ export function LandlordRevenueLineChart() {
             />
             <YAxis
               tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={kesTick}
-              width={44}
+              axisLine={false} tickLine={false} tickFormatter={kesTick} width={44}
             />
             <Tooltip
-              contentStyle={{
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-                background: "var(--card)",
-              }}
+              contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)" }}
               formatter={(value) => {
                 const n = typeof value === "number" ? value : Number(value);
                 return [formatKes(Number.isFinite(n) ? n : 0), "Collected"];
@@ -84,10 +60,7 @@ export function LandlordRevenueLineChart() {
               labelFormatter={(label) => `${label}`}
             />
             <Line
-              type="monotone"
-              dataKey="amount"
-              stroke="#0A4266"
-              strokeWidth={2.5}
+              type="monotone" dataKey="amount" stroke="#0A4266" strokeWidth={2.5}
               dot={{ r: 3, fill: "#0A4266", strokeWidth: 0 }}
               activeDot={{ r: 5, fill: "#0A4266", stroke: "var(--card)", strokeWidth: 2 }}
             />
