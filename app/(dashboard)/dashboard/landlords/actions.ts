@@ -2,9 +2,13 @@
 
 import { randomUUID } from "crypto";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { buildLandlordImpact } from "@/lib/delete/impact";
+import type { DeletePreviewResult } from "@/lib/delete/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { assertAdmin } from "@/lib/supabase/authz";
 import { requirePublicSupabaseConfig } from "@/lib/supabase/env";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json, PayoutSchedule } from "@/lib/supabase/types";
@@ -192,4 +196,104 @@ export async function createLandlordAccount(
     onboardedByEmail: adminProfile.email,
     onboardedByName: adminProfile.full_name,
   };
+}
+
+const LANDLORD_UUID_RE = /^[0-9a-f-]{36}$/i;
+
+export async function previewDeleteLandlord(landlordId: string): Promise<DeletePreviewResult> {
+  if (typeof landlordId !== "string" || !LANDLORD_UUID_RE.test(landlordId)) {
+    return { ok: false, error: "Invalid landlord." };
+  }
+  const actor = await assertAdmin();
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+
+  const { data: existing } = await admin
+    .from("landlords")
+    .select("id")
+    .eq("id", landlordId)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: "Landlord not found." };
+
+  const { data: buildingRows } = await admin
+    .from("buildings")
+    .select("id")
+    .eq("landlord_id", landlordId);
+  const buildingIds = (buildingRows ?? []).map((b) => b.id);
+
+  let unitsCount = 0;
+  if (buildingIds.length) {
+    const u = await admin
+      .from("units")
+      .select("id", { count: "exact", head: true })
+      .in("building_id", buildingIds);
+    unitsCount = u.count ?? 0;
+  }
+
+  const [tenants, meters, payouts] = await Promise.all([
+    admin.from("tenants").select("id", { count: "exact", head: true }).eq("landlord_id", landlordId),
+    admin.from("meters").select("id", { count: "exact", head: true }).eq("landlord_id", landlordId),
+    admin.from("payouts").select("id", { count: "exact", head: true }).eq("landlord_id", landlordId),
+  ]);
+
+  return {
+    ok: true,
+    impact: buildLandlordImpact({
+      buildings: buildingIds.length,
+      units: unitsCount,
+      tenants: tenants.count ?? 0,
+      meters: meters.count ?? 0,
+      payouts: payouts.count ?? 0,
+    }),
+  };
+}
+
+export async function deleteLandlord(
+  landlordId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof landlordId !== "string" || !LANDLORD_UUID_RE.test(landlordId)) {
+    return { ok: false, error: "Invalid landlord." };
+  }
+  const actor = await assertAdmin();
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+
+  const { data: existing } = await admin
+    .from("landlords")
+    .select("id")
+    .eq("id", landlordId)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: "Landlord not found." };
+
+  // tenants.landlord_id is ON DELETE RESTRICT — remove tenants (and their logins) first.
+  const { data: tenants, error: tErr } = await admin
+    .from("tenants")
+    .select("id, profile_id")
+    .eq("landlord_id", landlordId);
+  if (tErr) return { ok: false, error: tErr.message };
+
+  for (const t of tenants ?? []) {
+    if (t.profile_id) {
+      await admin.auth.admin.deleteUser(t.profile_id);
+    }
+  }
+  if ((tenants ?? []).length) {
+    const { error: delTenantsErr } = await admin
+      .from("tenants")
+      .delete()
+      .eq("landlord_id", landlordId);
+    if (delTenantsErr) return { ok: false, error: delTenantsErr.message };
+  }
+
+  // Now the landlord: buildings→units cascade, meters set null, payouts cascade (DB).
+  const { error } = await admin.from("landlords").delete().eq("id", landlordId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/dashboard/landlords");
+  revalidatePath("/dashboard/buildings");
+  revalidatePath("/dashboard/units");
+  revalidatePath("/dashboard/tenants");
+  revalidatePath("/dashboard/meters");
+  revalidatePath("/dashboard/payouts");
+  return { ok: true };
 }
