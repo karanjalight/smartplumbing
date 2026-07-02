@@ -115,7 +115,12 @@ function buildHandoffDocument(h: HandoffState, loginUrl: string): string {
   return parts.join("\n");
 }
 
-export function CreateLandlordView() {
+export function CreateLandlordView({
+  successHref,
+}: {
+  /** Optional post-create destination; `:id` → new landlord id. Defaults to the landlords list. */
+  successHref?: string;
+} = {}) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -261,9 +266,14 @@ export function CreateLandlordView() {
   };
 
   const closeCredentialsModal = () => {
+    const newLandlordId = handoff?.landlordId;
     dialogRef.current?.close();
     setHandoff(null);
-    router.push("/dashboard/landlords");
+    if (successHref && newLandlordId) {
+      router.push(successHref.replace(":id", newLandlordId));
+    } else {
+      router.push("/dashboard/landlords");
+    }
   };
 
   useEffect(() => {

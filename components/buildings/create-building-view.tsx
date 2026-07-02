@@ -91,12 +91,15 @@ export type CreateBuildingViewProps = {
    * `listHref` when omitted.
    */
   successHref?: string;
+  /** Admin only: pre-select the landlord this building is being created for. */
+  initialLandlordId?: string;
 };
 
 export function CreateBuildingView({
   variant,
   listHref,
   successHref,
+  initialLandlordId,
 }: CreateBuildingViewProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -113,7 +116,9 @@ export function CreateBuildingView({
 
   const [landlordMenuOpen, setLandlordMenuOpen] = useState(false);
   const [landlordQuery, setLandlordQuery] = useState("");
-  const [landlordId, setLandlordId] = useState("");
+  const [landlordId, setLandlordId] = useState(
+    variant === "admin" ? (initialLandlordId ?? "") : ""
+  );
   const [landlordOptions, setLandlordOptions] = useState<LandlordOption[]>([]);
   const [landlordsLoaded, setLandlordsLoaded] = useState(variant !== "admin");
   const landlordMenuRef = useRef<HTMLDivElement>(null);

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   CreditCard,
+  DoorOpen,
   FileBarChart,
   Gauge,
   HelpCircle,
@@ -16,6 +17,7 @@ import {
   Layers,
   LayoutGrid,
   PlusCircle,
+  Rocket,
   ScrollText,
   Settings,
   SlidersHorizontal,
@@ -49,12 +51,21 @@ const menuGroups: MenuGroup[] = [
     items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutGrid }],
   },
   {
+    id: "onboarding",
+    title: "Onboarding",
+    icon: Rocket,
+    items: [
+      { href: "/dashboard/onboarding", label: "Set up a landlord", icon: Rocket },
+    ],
+  },
+  {
     id: "people",
-    title: "People & Properties",
+    title: "Properties & Management",
     icon: Building2,
     items: [
       { href: "/dashboard/landlords", label: "Landlords", icon: Briefcase },
       { href: "/dashboard/buildings", label: "Buildings", icon: Layers },
+      { href: "/dashboard/units", label: "Units", icon: DoorOpen },
       { href: "/dashboard/tenants", label: "Tenants", icon: Users },
       { href: "/dashboard/leases", label: "Leases", icon: ScrollText },
       { href: "/dashboard/staff", label: "Staff", icon: UserCog },

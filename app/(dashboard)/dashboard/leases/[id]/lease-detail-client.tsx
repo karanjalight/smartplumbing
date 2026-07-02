@@ -51,8 +51,14 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 export function LeaseDetailClient({
-  lease, clauses, signedRoles,
-}: { lease: LeaseRow; clauses: LeaseClause[]; signedRoles: LeaseSignerRole[] }) {
+  lease, clauses, signedRoles, backHref = "/dashboard/leases", backLabel = "Back to leases",
+}: {
+  lease: LeaseRow;
+  clauses: LeaseClause[];
+  signedRoles: LeaseSignerRole[];
+  backHref?: string;
+  backLabel?: string;
+}) {
   const router = useRouter();
   const [overrides, setOverrides] = useState<Record<string, string>>(
     (lease.clause_overrides as Record<string, string>) ?? {}
@@ -109,11 +115,11 @@ export function LeaseDetailClient({
       {/* Header */}
       <div className="space-y-3">
         <Link
-          href="/dashboard/leases"
+          href={backHref}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          Back to leases
+          {backLabel}
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

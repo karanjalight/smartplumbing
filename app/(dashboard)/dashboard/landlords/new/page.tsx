@@ -5,6 +5,13 @@ export const metadata = {
   description: "Create a landlord portal account and link their portfolio.",
 };
 
-export default function NewLandlordPage() {
-  return <CreateLandlordView />;
+export default async function NewLandlordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ flow?: string }>;
+}) {
+  const { flow } = await searchParams;
+  const successHref =
+    flow === "onboarding" ? "/dashboard/onboarding/landlord/:id" : undefined;
+  return <CreateLandlordView successHref={successHref} />;
 }

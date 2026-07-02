@@ -8,13 +8,17 @@ export const metadata = {
   description: "Create a new property and houses under your portfolio.",
 };
 
-export default async function LandlordNewBuildingPage() {
+export default async function LandlordNewBuildingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ flow?: string }>;
+}) {
   const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
   const { data: profile } = await supabase
     .from("profiles")
@@ -22,12 +26,21 @@ export default async function LandlordNewBuildingPage() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "landlord") {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
+  const { flow } = await searchParams;
+  const onboarding = flow === "onboarding";
   return (
     <CreateBuildingView
       variant="landlord"
-      listHref="/landlords/dashboard/buildings"
+      listHref={
+        onboarding
+          ? "/landlords/dashboard/onboarding"
+          : "/landlords/dashboard/buildings"
+      }
+      successHref={
+        onboarding ? "/landlords/dashboard/onboarding/building/:id" : undefined
+      }
     />
   );
 }
