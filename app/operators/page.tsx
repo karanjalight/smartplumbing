@@ -30,7 +30,7 @@ export default function OperatorsPage() {
           { label: "Bring your portfolio onboard", href: "/sign-up" },
           {
             label: "Landlord sign-in",
-            href: "/landlords/login",
+            href: "/auth/login",
             variant: "ghost",
           },
         ]}

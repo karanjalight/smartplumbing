@@ -23,10 +23,9 @@ import {
   authInputClassName,
   authLinkClassName,
 } from "@/lib/auth-ui";
-import { dashboardPathForRole } from "@/lib/auth/routes";
+import { signInWithEmailPassword } from "@/app/auth/actions";
 import { getPublicSupabaseConfig } from "@/lib/supabase/env";
-import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { UserRole } from "@/lib/supabase/types";
+import { supabaseAuthErrorMessage } from "@/lib/supabase/auth-errors";
 import { cn } from "@/lib/utils";
 
 const signInSchema = z.object({
@@ -58,8 +57,7 @@ export function SignInForm() {
     form.clearErrors();
     setFormError(null);
 
-    const supabase = tryGetSupabaseBrowserClient();
-    if (!supabase) {
+    if (!supabaseReady) {
       setFormError(
         "Sign-in is not available yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see docs/SUPABASE.md)."
       );
@@ -68,47 +66,28 @@ export function SignInForm() {
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: values.email.trim().toLowerCase(),
+      const result = await signInWithEmailPassword({
+        email: values.email,
         password: values.password,
       });
 
-      if (error) {
-        form.setError("password", {
-          type: "server",
-          message: error.message,
-        });
+      if (!result.ok) {
+        if (result.passwordMessage) {
+          form.setError("password", {
+            type: "server",
+            message: result.passwordMessage,
+          });
+          return;
+        }
+        setFormError(result.formError ?? "Sign-in failed. Try again.");
         return;
       }
-
-      const user = data.user;
-      if (!user) {
-        form.setError("password", {
-          type: "server",
-          message: "No user was returned from sign-in. Try again.",
-        });
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) {
-        setFormError(
-          profileError.message || "Could not load your profile. Try again."
-        );
-        return;
-      }
-
-      const role = (profile?.role ?? "tenant") as UserRole;
-      const next = dashboardPathForRole(role);
 
       toast.success("Signed in");
       router.refresh();
-      router.push(next);
+      router.push(result.redirectTo);
+    } catch (error) {
+      setFormError(supabaseAuthErrorMessage(error));
     } finally {
       setSubmitting(false);
     }

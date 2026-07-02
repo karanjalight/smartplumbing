@@ -26,7 +26,7 @@ export default function ResidentsPage() {
         }
         description="An installable progressive web app for tenants in Karen, Lavington, Kileleshwa and beyond. Pay rent on M-Pesa, buy water tokens in seconds, and watch maintenance tickets resolve in real time."
         ctas={[
-          { label: "Resident sign-in", href: "/clients/login" },
+          { label: "Resident sign-in", href: "/auth/login" },
           { label: "How it works", href: "/platform", variant: "ghost" },
         ]}
         trustChips={[

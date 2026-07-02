@@ -421,7 +421,7 @@ export async function createTenantAccount(
   const smartoneMeta = {
     role: "tenant" as const,
     tenant_code: tenantCode,
-    tenant_portal_path: "/clients/login",
+    tenant_portal_path: "/auth/login",
     landlord_id: scopedLandlordId,
     product: "mali_smart",
   };

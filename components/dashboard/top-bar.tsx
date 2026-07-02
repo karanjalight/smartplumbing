@@ -184,7 +184,7 @@ export function TopBar({ onMenuClick, portal = "admin" }: TopBarProps) {
   const settingsHref = isLandlord
     ? "/landlords/dashboard/settings"
     : "/dashboard/settings";
-  const signInHref = isLandlord ? "/landlords/login" : "/auth/login";
+  const signInHref = "/auth/login";
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 

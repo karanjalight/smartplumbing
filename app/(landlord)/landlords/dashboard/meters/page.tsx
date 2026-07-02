@@ -15,7 +15,7 @@ export default async function LandlordMetersPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
   const { data: profile } = await supabase
     .from("profiles")
@@ -23,7 +23,7 @@ export default async function LandlordMetersPage() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "landlord") {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
   const { data: landlord } = await supabase
     .from("landlords")
@@ -31,7 +31,7 @@ export default async function LandlordMetersPage() {
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!landlord?.id) {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
 
   let initialRows: Awaited<ReturnType<typeof fetchMeterRowsForLandlord>> = [];

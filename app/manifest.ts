@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Mali Smart",
     short_name: "Mali Smart",
     description: "Client portal for Mali Smart water billing and service requests.",
-    start_url: "/clients/login",
+    start_url: "/auth/login",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

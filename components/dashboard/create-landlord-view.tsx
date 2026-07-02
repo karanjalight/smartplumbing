@@ -138,8 +138,8 @@ export function CreateLandlordView() {
 
   const loginUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/landlords/login`
-      : "/landlords/login";
+      ? `${window.location.origin}/auth/login`
+      : "/auth/login";
 
   const handoffDoc = handoff ? buildHandoffDocument(handoff, loginUrl) : "";
 

@@ -95,7 +95,7 @@ export async function createLandlordAccount(
   const smartoneMeta = {
     role: "landlord" as const,
     landlord_code: landlordCode,
-    landlord_portal_path: "/landlords/login",
+    landlord_portal_path: "/auth/login",
     onboarded_by_profile_id: user.id,
     onboarded_at: onboardedAt,
     product: "mali_smart",

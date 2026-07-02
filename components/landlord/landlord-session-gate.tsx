@@ -35,7 +35,7 @@ export function LandlordSessionGate({
           Sign in with your landlord account to manage tenants and properties.
         </p>
         <Link
-          href="/landlords/login"
+          href="/auth/login"
           className={cn(
             buttonVariants({ variant: "default" }),
             "inline-flex rounded-full bg-[#0A4266] text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground",
