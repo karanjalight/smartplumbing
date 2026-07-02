@@ -2,6 +2,7 @@ import { CheckCircle2, Clock, FileSignature, Plus, ScrollText } from "lucide-rea
 import Link from "next/link";
 
 import { LeaseStatusBadge } from "@/components/leases/lease-status-badge";
+import { LeaseRowActions } from "@/components/dashboard/lease-row-actions";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
 import { listLeases } from "@/lib/leases/queries";
@@ -104,6 +105,7 @@ export default async function LeasesPage() {
                   <th className="px-5 py-3">Term</th>
                   <th className="px-5 py-3">Rent</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3.5 text-right font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -129,6 +131,9 @@ export default async function LeasesPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <LeaseStatusBadge status={l.status} expiry={deriveExpiry(l, now)} />
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <LeaseRowActions leaseId={l.id} label={l.code ?? l.id.slice(0, 8)} />
                     </td>
                   </tr>
                 ))}
