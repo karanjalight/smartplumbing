@@ -95,11 +95,13 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full transition-colors duration-300",
+        "sticky top-0 z-50 w-full transition-[background-color,backdrop-filter,border-color] duration-300",
         scrolled || open
           ? "border-b border-border/70 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70"
           : isOverlay
-            ? "border-b border-white/10 bg-transparent"
+            ? // Blends into the hero photo: a top-down scrim keeps the white
+              // logo + links legible, then fades to transparent at the edge.
+              "border-b border-transparent bg-gradient-to-b from-black/55 via-black/25 to-transparent"
             : "border-b border-transparent bg-transparent"
       )}
       role="banner"

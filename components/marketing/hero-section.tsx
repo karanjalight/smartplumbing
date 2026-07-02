@@ -31,7 +31,7 @@ export function HeroSection() {
   return (
     <>
       {/* ---------- Cinematic hero ---------- */}
-      <section className="relative isolate flex min-h-[88svh] flex-col justify-center overflow-hidden lg:min-h-[92svh]">
+      <section className="relative isolate -mt-16 flex min-h-[88svh] flex-col justify-center overflow-hidden sm:-mt-20 lg:min-h-[92svh]">
         <HeroCarousel images={HERO_BACKDROPS} />
 
         {/* Brand scrim — keeps white text legible over any frame */}
