@@ -167,7 +167,13 @@ export type UnitType =
   | "five_bedroom"
   | "six_bedroom"
   | "seven_bedroom"
-  | "eight_bedroom";
+  | "eight_bedroom"
+  | "commercial"
+  | "office"
+  | "shop"
+  | "warehouse"
+  | "parking"
+  | "other";
 
 export type UnitRow = Timestamps & {
   id: string;
