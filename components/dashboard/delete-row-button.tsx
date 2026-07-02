@@ -22,7 +22,7 @@ export type DeleteRowButtonProps = {
   successMessage?: string;
   /** Called after a successful delete. If omitted, `router.refresh()` is used. */
   onDeleted?: () => void;
-  /** Button text. Omit for an icon-only button. */
+  /** Button text; defaults to "Delete". */
   label?: string;
   className?: string;
 };
@@ -49,28 +49,40 @@ export function DeleteRowButton({
     setImpact([]);
     setLoadingImpact(true);
     setOpen(true);
-    const res = await preview();
-    setLoadingImpact(false);
-    if (!res.ok) {
-      toast.error(res.error);
+    try {
+      const res = await preview();
+      if (!res.ok) {
+        toast.error(res.error);
+        setOpen(false);
+        return;
+      }
+      setImpact(res.impact);
+    } catch {
+      toast.error("Could not check what will be affected.");
       setOpen(false);
-      return;
+    } finally {
+      setLoadingImpact(false);
     }
-    setImpact(res.impact);
   }
 
   async function confirm() {
     setBusy(true);
-    const res = await onDelete();
-    setBusy(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return; // keep dialog open so the admin can retry
+    try {
+      const res = await onDelete();
+      if (!res.ok) {
+        toast.error(res.error);
+        return; // keep dialog open so the admin can retry
+      }
+      toast.success(successMessage);
+      setOpen(false);
+      if (onDeleted) onDeleted();
+      else router.refresh();
+    } catch {
+      toast.error("Something went wrong while deleting.");
+      // keep dialog open so the admin can retry
+    } finally {
+      setBusy(false);
     }
-    toast.success(successMessage);
-    setOpen(false);
-    if (onDeleted) onDeleted();
-    else router.refresh();
   }
 
   return (
