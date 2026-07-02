@@ -4,28 +4,13 @@ import { ArrowRight, Droplets, Star, TrendingUp } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { DashboardMockup } from "@/components/marketing/dashboard-mockup";
 import { HeroCarousel } from "@/components/marketing/hero-carousel";
-import {
-  FadeChild,
-  FadeUp,
-  Floating,
-  StaggerGroup,
-} from "@/components/marketing/motion-primitives";
+import { FadeUp, Floating } from "@/components/marketing/motion-primitives";
 import { HERO_AVATARS, HERO_BACKDROPS } from "@/lib/marketing-images";
 import { cn } from "@/lib/utils";
 
 const TRUST_SIGNAL =
   "Built for Kenyan landlords, estates, and agencies · M-Pesa native · STS prepaid water · LONGi integration";
-
-const LOGOS = [
-  "Karen Properties",
-  "Tatu Estates",
-  "Riverside Mews",
-  "Westpark Holdings",
-  "Ngong Heights",
-  "Lavington Co.",
-];
 
 export function HeroSection() {
   return (
@@ -55,16 +40,16 @@ export function HeroSection() {
 
             <FadeUp delay={0.06} className="mt-6">
               <h1 className="text-balance text-4xl font-semibold leading-[1.04] tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-7xl">
-                The operating system for{" "}
-                <span className="text-[#7AB8D9]">modern property</span> portfolios.
+                Collect rent and bill water —{" "}
+                <span className="text-[#7AB8D9]">automatically, on M-Pesa</span>.
               </h1>
             </FadeUp>
 
             <FadeUp delay={0.12} className="mt-6 max-w-xl">
               <p className="text-pretty text-base text-white/75 sm:text-lg">
-                Smart water metering, rent collection, WiFi billing, and
-                maintenance — one platform, all on M-Pesa. Built in Nairobi for
-                African property teams.
+                Mali Smart is the operating system for Kenyan rentals — prepaid
+                smart water, rent collection, WiFi billing, and maintenance in one
+                platform. Built in Nairobi for landlords, estates, and agencies.
               </p>
             </FadeUp>
 
@@ -83,7 +68,7 @@ export function HeroSection() {
                 />
               </Link>
               <Link
-                href="#product"
+                href="#how-it-works"
                 className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 bg-white/10 px-6 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20"
               >
                 See how it works
@@ -143,40 +128,6 @@ export function HeroSection() {
             delta="+12.4% MoM"
           />
         </Floating>
-      </section>
-
-      {/* ---------- Product preview + logos (light) ---------- */}
-      <section id="product" className="relative bg-background">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative mx-auto -mt-16 max-w-6xl sm:-mt-24">
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-6 -z-10 h-72 rounded-full bg-[radial-gradient(closest-side,rgba(107,180,232,0.35),transparent)] blur-3xl dark:bg-[radial-gradient(closest-side,rgba(107,180,232,0.18),transparent)]"
-              aria-hidden
-            />
-            <FadeUp amount={0.1}>
-              <DashboardMockup />
-            </FadeUp>
-          </div>
-
-          <FadeUp delay={0.15} className="mx-auto my-16 max-w-5xl text-center">
-            <p className="text-md font-bold tracking-[0.18em] text-muted-foreground uppercase">
-              Trusted by property teams across Kenya
-            </p>
-            <StaggerGroup
-              stagger={0.06}
-              className="mt-6 grid grid-cols-2 items-center gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6"
-            >
-              {LOGOS.map((name) => (
-                <FadeChild
-                  key={name}
-                  className="text-sm font-semibold tracking-tight text-muted-foreground/80 transition-colors hover:text-foreground"
-                >
-                  {name}
-                </FadeChild>
-              ))}
-            </StaggerGroup>
-          </FadeUp>
-        </div>
       </section>
     </>
   );

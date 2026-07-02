@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { DashboardMockup } from "@/components/marketing/dashboard-mockup";
 import {
   FadeChild,
   FadeUp,
@@ -70,8 +71,18 @@ const OUTCOMES: Outcome[] = [
   },
 ];
 
+const LOGOS = [
+  "Karen Properties",
+  "Tatu Estates",
+  "Riverside Mews",
+  "Westpark Holdings",
+  "Ngong Heights",
+  "Lavington Co.",
+];
+
 export function HowItWorksSection() {
   return (
+    <>
     <section
       id="how-it-works"
       className="relative overflow-hidden border-y border-border/60 bg-muted/30 py-24 sm:py-28 lg:py-32"
@@ -114,8 +125,8 @@ export function HowItWorksSection() {
             className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 lg:gap-10"
           >
             {STEPS.map(({ icon: Icon, title, description }, i) => (
-              <FadeChild key={title} className="relative text-center lg:text-left">
-                <div className="flex items-center justify-center gap-3 lg:justify-start">
+              <FadeChild key={title} className="relative text-center">
+                <div className="flex items-center justify-center gap-3">
                   <span className="relative grid size-14 shrink-0 place-items-center rounded-2xl bg-[#0A4266] text-white shadow-[0_16px_36px_-14px_rgba(10,66,102,0.6)] dark:bg-[#6BB4E8] dark:text-[#062538]">
                     <Icon className="size-6" aria-hidden />
                     <span className="absolute -right-2 -top-2 grid size-6 place-items-center rounded-full border border-border bg-background text-xs font-bold text-[#0A4266] dark:text-[#7AB8D9]">
@@ -126,7 +137,7 @@ export function HowItWorksSection() {
                 <h3 className="mt-5 text-lg font-semibold tracking-tight text-foreground">
                   {title}
                 </h3>
-                <p className="mx-auto mt-2 max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground lg:mx-0">
+                <p className="mx-auto mt-2 max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">
                   {description}
                 </p>
               </FadeChild>
@@ -162,5 +173,39 @@ export function HowItWorksSection() {
         </FadeUp>
       </div>
     </section>
+
+      <section id="product" className="relative bg-background mt-10">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="relative mx-auto -mt-16 max-w-6xl sm:-mt-24">
+            <div
+              className="pointer-events-none absolute inset-x-8 -top-6 -z-10 h-72 rounded-full bg-[radial-gradient(closest-side,rgba(107,180,232,0.35),transparent)] blur-3xl dark:bg-[radial-gradient(closest-side,rgba(107,180,232,0.18),transparent)]"
+              aria-hidden
+            />
+            <FadeUp amount={0.1}>
+              <DashboardMockup />
+            </FadeUp>
+          </div>
+
+          <FadeUp delay={0.15} className="mx-auto my-16 max-w-5xl text-center">
+            <p className="text-md font-bold tracking-[0.18em] text-muted-foreground uppercase">
+              Trusted by property teams across Kenya
+            </p>
+            <StaggerGroup
+              stagger={0.06}
+              className="mt-6 grid grid-cols-2 items-center gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6"
+            >
+              {LOGOS.map((name) => (
+                <FadeChild
+                  key={name}
+                  className="text-sm font-semibold tracking-tight text-muted-foreground/80 transition-colors hover:text-foreground"
+                >
+                  {name}
+                </FadeChild>
+              ))}
+            </StaggerGroup>
+          </FadeUp>
+        </div>
+      </section>
+    </>
   );
 }
