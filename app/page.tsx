@@ -37,7 +37,7 @@ export default function HomePage() {
         Skip to main content
       </a>
 
-      <MarketingNav />
+      <MarketingNav variant="overlay" />
 
       <main id="main" tabIndex={-1}>
         <HeroSection />

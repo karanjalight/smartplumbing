@@ -231,3 +231,24 @@ export const PAGE_HERO_IMAGES = {
 } as const;
 
 export type PageHeroKey = keyof typeof PAGE_HERO_IMAGES;
+
+/* ------------------------------------------------------------------ */
+/* Homepage hero · rotating full-bleed backdrop carousel (16:9, wide)  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Five cinematic backdrops for the homepage hero carousel. The mix tells the
+ * Mali Smart story: modern Nairobi apartment blocks (what you manage) plus the
+ * metered water infrastructure underneath (the differentiator). Each is fetched
+ * at 1920×1080 for full-bleed retina coverage; the hero applies a dark brand
+ * scrim so light text stays legible over every frame.
+ *
+ * Swap any URL here to change the hero imagery without touching the component.
+ */
+export const HERO_BACKDROPS: MarketingImage[] = [
+  pexels(29887755, 1920, 1080, "Modern high-rise apartments at dusk in Lavington, Nairobi"),
+  pexels(28764706, 1920, 1080, "Contemporary residential apartment block in Karen, Nairobi"),
+  pexels(372796, 1920, 1080, "Stainless-steel water pipes and pressure gauges — the metered infrastructure"),
+  pexels(6084201, 1920, 1080, "Contemporary residential building at Tatu Heights, Ruiru"),
+  pexels(6585753, 1920, 1080, "Modern bathroom fixtures — the water Mali Smart meters and bills"),
+];
