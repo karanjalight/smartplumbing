@@ -119,7 +119,12 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
         >
           <BrandLogo
             variant="compact"
-            imageClassName="h-24 w-auto sm:h-36 dark:invert"
+            imageClassName={cn(
+              "h-24 w-auto sm:h-36",
+              // Over the hero photo the logo must read light in either theme;
+              // otherwise follow the theme (dark logo on the frosted light nav).
+              onDark ? "invert" : "dark:invert"
+            )}
             withSurface={false}
           />
           {/* <span
