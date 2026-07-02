@@ -293,10 +293,13 @@ await supabase.from("token_purchases").insert({
 
 ## 9. Auth flows
 
-1. **Sign-in (all roles)** (`/`, home) — the `SignInForm` uses
-   `signInWithPassword`, loads `profiles.role`, and redirects with
-   `dashboardPathForRole` (`admin` → `/dashboard`, `landlord` →
-   `/landlords/dashboard`, `tenant` → `/clients/dashboard`).
+1. **Sign-in (all roles)** (`/auth/login`, landlord and client portals) —
+   forms call the server action `signInWithEmailPassword` in
+   `app/auth/actions.ts`. Auth runs on the Next.js server (same origin), which
+   avoids browser CORS/network blocks against `*.supabase.co`. The action loads
+   `profiles.role` and redirects with `dashboardPathForRole` (`admin` →
+   `/dashboard`, `landlord` → `/landlords/dashboard`, `tenant` →
+   `/clients/dashboard`).
 2. **Tenant sign-up** (`/sign-up`, without admin checkbox) — call
    `supabase.auth.signUp({ email, password, options: { data: { full_name } } })`.
    The trigger creates a `profiles` row with `role = 'tenant'`. An admin can
@@ -307,7 +310,8 @@ await supabase.from("token_purchases").insert({
    browser). The action creates the user with the service-role client and sets
    `profiles.role = 'admin'`. There is no invite code; restrict or remove this
    path in production if you need tighter control.
-4. **Landlord login** (`/landlords/login`) — same `signInWithPassword`. The
+4. **Landlord login** (`/landlords/login`) — same server action with
+   `portal: "landlord"`. The
    shell at `app/(landlord)/layout.tsx` should call
    `getSupabaseServerClient()`, read `current_role_name()`, and redirect to
    `/clients/dashboard` if the role isn't `landlord` or `admin`.

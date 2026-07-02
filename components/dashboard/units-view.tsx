@@ -161,12 +161,25 @@ export function UnitsView({ rows }: { rows: AdminUnitListRow[] }) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [buildingFilter, setBuildingFilter] = useState<string>("all");
   const [groupByType, setGroupByType] = useState(false);
+
+  // Distinct buildings present in the data, for the building filter.
+  const buildings = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const u of rows) {
+      if (!byId.has(u.buildingId)) byId.set(u.buildingId, u.buildingName);
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((u) => {
       if (typeFilter !== "all" && u.unitType !== typeFilter) return false;
+      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
       if (statusFilter === "occupied" && !u.occupied) return false;
       if (statusFilter === "vacant" && u.occupied) return false;
       if (!q) return true;
@@ -176,7 +189,7 @@ export function UnitsView({ rows }: { rows: AdminUnitListRow[] }) {
         u.buildingName.toLowerCase().includes(q)
       );
     });
-  }, [rows, search, typeFilter, statusFilter]);
+  }, [rows, search, typeFilter, statusFilter, buildingFilter]);
 
   const totals = useMemo(() => {
     const occupied = rows.filter((u) => u.occupied).length;
@@ -244,6 +257,23 @@ export function UnitsView({ rows }: { rows: AdminUnitListRow[] }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor="building-filter">
+            Filter by building
+          </label>
+          <select
+            id="building-filter"
+            className={SELECT_CLASS}
+            value={buildingFilter}
+            onChange={(e) => setBuildingFilter(e.target.value)}
+          >
+            <option value="all">All buildings</option>
+            {buildings.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+
           <label className="sr-only" htmlFor="type-filter">
             Filter by type
           </label>

@@ -163,7 +163,7 @@ export function OnboardingHubView({
   const hasBuildings = buildings.length > 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-4 md:p-6">
+    <div className="space-y-8 p-4 md:p-6">
       <header className="flex flex-col gap-4 border-b border-border pb-6 dark:border-border/80 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           {context ? (
@@ -247,7 +247,7 @@ export function OnboardingHubView({
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Your buildings</h2>
         {hasBuildings ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {buildings.map((b) => (
               <BuildingCard key={b.id} building={b} buildingBase={paths.buildingBase} />
             ))}

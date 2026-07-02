@@ -83,7 +83,7 @@ export function AdminOnboardingHome({
   }, [landlords, search]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-4 md:p-6">
+    <div className="space-y-8 p-4 md:p-6">
       <header className="flex flex-col gap-4 border-b border-border pb-6 dark:border-border/80 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-[#0A4266] dark:text-[#6BB4E8]">

@@ -5,6 +5,7 @@ import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { PageHero } from "@/components/marketing/page-hero";
 import { PropertiesGallerySection } from "@/components/marketing/properties-gallery-section";
 import { SmartMeteringSection } from "@/components/marketing/smart-metering-section";
+import { StsMeteringSection } from "@/components/marketing/sts-metering-section";
 
 export const metadata: Metadata = {
   title: "Smart Metering",
@@ -38,6 +39,7 @@ export default function MeteringPage() {
       />
 
       <SmartMeteringSection />
+      <StsMeteringSection />
       <PropertiesGallerySection />
       <CtaSection />
     </MarketingPageShell>

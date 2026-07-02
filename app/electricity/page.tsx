@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { CtaSection } from "@/components/marketing/cta-section";
+import { ElectricityMeterSection } from "@/components/marketing/electricity-meter-section";
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
 import { PageHero } from "@/components/marketing/page-hero";
 import { SolutionDetailSection } from "@/components/marketing/solution-detail-section";
@@ -65,6 +66,8 @@ export default function ElectricityPage() {
           "Owner reporting",
         ]}
       />
+
+      <ElectricityMeterSection />
 
       <SolutionDetailSection
         eyebrow="Electricity operations"

@@ -181,6 +181,33 @@ export const DEMO_BOOKING_IMAGE: MarketingImage = pexels(
   "Property operations lead reviewing a portfolio walkthrough on Mali Smart"
 );
 
+/**
+ * Metering page · STS meter + CIU hardware product shot.
+ *
+ * Local asset (not Pexels) so the site owns the image and has no runtime
+ * dependency on an external host. Square product shot on a white background —
+ * render with `object-contain` on a light surface.
+ */
+export const STS_HARDWARE_IMAGE: MarketingImage = {
+  src: "/img/water-meter.webp",
+  width: 800,
+  height: 800,
+  alt: "STS prepaid split water meter with its Customer Interface Unit (CIU) keypad",
+};
+
+/**
+ * Electricity page · prepaid keypad electricity meter product shot.
+ *
+ * Local asset (square product shot on a white background) — render with
+ * `object-contain` on a light surface, same as {@link STS_HARDWARE_IMAGE}.
+ */
+export const ELECTRICITY_METER_IMAGE: MarketingImage = {
+  src: "/img/electricity-meter.jpg",
+  width: 554,
+  height: 554,
+  alt: "STS prepaid electricity meter with an integrated token keypad",
+};
+
 /* ------------------------------------------------------------------ */
 /* Sub-page hero backgrounds (wide, cinematic, ~1600×900)              */
 /* ------------------------------------------------------------------ */
