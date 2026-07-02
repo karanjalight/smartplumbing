@@ -16,7 +16,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { deletePayout, previewDeletePayout } from "@/app/(dashboard)/dashboard/payouts/actions";
 import { useLandlordFinanceStore } from "@/components/landlord/use-landlord-finance-store";
+import { DeleteRowButton } from "@/components/dashboard/delete-row-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -676,16 +678,26 @@ export function PayoutsView({ landlordPortalId }: PayoutsViewProps) {
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatWhen(row.paidAtIso)}</td>
                       {!landlordPortalId && (
                         <td className="px-4 py-3 text-right">
-                          <Link
-                            href={`/dashboard/landlords/${encodeURIComponent(row.landlordId)}`}
-                            className={cn(
-                              buttonVariants({ variant: "outline", size: "sm" }),
-                              "inline-flex h-8 rounded-full px-3 text-xs"
-                            )}
-                            aria-label={`View landlord ${row.company}`}
-                          >
-                            View
-                          </Link>
+                          <div className="flex items-center justify-end gap-2">
+                            <Link
+                              href={`/dashboard/landlords/${encodeURIComponent(row.landlordId)}`}
+                              className={cn(
+                                buttonVariants({ variant: "outline", size: "sm" }),
+                                "inline-flex h-8 rounded-full px-3 text-xs"
+                              )}
+                              aria-label={`View landlord ${row.company}`}
+                            >
+                              View
+                            </Link>
+                            <DeleteRowButton
+                              preview={() => previewDeletePayout(row.id)}
+                              onDelete={() => deletePayout(row.id)}
+                              title="Delete payout?"
+                              description={`Payout ${row.reference} will be deleted. Linked payments are kept.`}
+                              successMessage="Payout deleted"
+                              onDeleted={() => setAdminRows((prev) => prev.filter((r) => r.id !== row.id))}
+                            />
+                          </div>
                         </td>
                       )}
                       {landlordPortalId && (
