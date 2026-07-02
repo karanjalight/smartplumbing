@@ -14,6 +14,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { deleteBuilding, previewDeleteBuilding } from "@/app/(dashboard)/dashboard/buildings/actions";
+import { DeleteRowButton } from "@/components/dashboard/delete-row-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BuildingListRow, DbBuildingRow } from "@/lib/buildings-data";
@@ -334,15 +336,24 @@ export function BuildingsView() {
                         KES {monthlyRentTotalKes(b).toLocaleString("en-KE")}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/dashboard/buildings/${encodeURIComponent(b.id)}`}
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                            "h-8 rounded-full px-3 text-xs",
-                          )}
-                        >
-                          Open
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/dashboard/buildings/${encodeURIComponent(b.id)}`}
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "h-8 rounded-full px-3 text-xs",
+                            )}
+                          >
+                            Open
+                          </Link>
+                          <DeleteRowButton
+                            preview={() => previewDeleteBuilding(b.id)}
+                            onDelete={() => deleteBuilding(b.id)}
+                            title="Delete building?"
+                            description={`"${b.name}" and its houses will be permanently deleted.`}
+                            successMessage="Building deleted"
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))
