@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AgencySection } from "@/components/marketing/agency-section";
 import { CtaSection } from "@/components/marketing/cta-section";
 import { HeroSection } from "@/components/marketing/hero-section";
+import { HowItWorksSection } from "@/components/marketing/how-it-works-section";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { MetricsSection } from "@/components/marketing/metrics-section";
@@ -40,15 +41,20 @@ export default function HomePage() {
       <MarketingNav variant="overlay" />
 
       <main id="main" tabIndex={-1}>
+        {/* Attention → agitate the status quo */}
         <HeroSection />
         <ProblemSection />
+        {/* Solution: the flow, then the capabilities */}
+        <HowItWorksSection />
         <ModulesSection />
         <SmartMeteringSection />
+        {/* Who benefits, by role */}
         <TenantExperienceSection />
         <AgencySection />
+        {/* Proof: deployments → numbers → voices → CTA */}
         <PropertiesGallerySection />
-        <TestimonialsSection />
         <MetricsSection />
+        <TestimonialsSection />
         <CtaSection />
       </main>
 
