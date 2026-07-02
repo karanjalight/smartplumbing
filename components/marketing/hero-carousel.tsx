@@ -69,7 +69,7 @@ export function HeroCarousel({
       </div>
 
       <div
-        className="absolute bottom-6 left-4 z-20 flex items-center gap-2 sm:left-6 lg:bottom-8 lg:left-8"
+        className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 lg:bottom-8"
         role="tablist"
         aria-label="Hero image"
       >
