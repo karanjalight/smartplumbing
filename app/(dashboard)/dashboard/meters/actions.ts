@@ -3,11 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { buildMeterImpact } from "@/lib/delete/impact";
+import type { DeletePreviewResult } from "@/lib/delete/types";
 import {
   getLongiConfigFromEnv,
   longiValidateMeter,
   mapLongiMeterTypeToModel,
 } from "@/lib/longi-vending";
+import { assertAdmin } from "@/lib/supabase/authz";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { MeterConnectivity, MeterModelType } from "@/lib/supabase/types";
 
@@ -259,4 +262,61 @@ export async function createMeter(input: unknown): Promise<CreateMeterResult> {
     longiCustomerName,
     longiMeterTypeLabel,
   };
+}
+
+export async function previewDeleteMeter(meterNo: string): Promise<DeletePreviewResult> {
+  if (typeof meterNo !== "string" || meterNo.trim() === "") {
+    return { ok: false, error: "Invalid meter." };
+  }
+  const actor = await assertAdmin();
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+
+  const { data: meter } = await admin
+    .from("meters")
+    .select("id")
+    .eq("meter_no", meterNo.trim())
+    .maybeSingle();
+  if (!meter) return { ok: false, error: "Meter not found." };
+  const meterId = meter.id;
+
+  const [tenants, payments, tokens] = await Promise.all([
+    admin.from("tenants").select("id", { count: "exact", head: true }).eq("meter_id", meterId),
+    admin.from("payments").select("id", { count: "exact", head: true }).eq("meter_id", meterId),
+    admin.from("token_purchases").select("id", { count: "exact", head: true }).eq("meter_id", meterId),
+  ]);
+
+  return {
+    ok: true,
+    impact: buildMeterImpact({
+      tenantsUnassigned: tenants.count ?? 0,
+      payments: payments.count ?? 0,
+      tokens: tokens.count ?? 0,
+    }),
+  };
+}
+
+export async function deleteMeter(
+  meterNo: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof meterNo !== "string" || meterNo.trim() === "") {
+    return { ok: false, error: "Invalid meter." };
+  }
+  const actor = await assertAdmin();
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+
+  const { data: meter } = await admin
+    .from("meters")
+    .select("id")
+    .eq("meter_no", meterNo.trim())
+    .maybeSingle();
+  if (!meter) return { ok: false, error: "Meter not found." };
+
+  const { error } = await admin.from("meters").delete().eq("id", meter.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/dashboard/meters");
+  revalidatePath("/dashboard/tenants");
+  return { ok: true };
 }

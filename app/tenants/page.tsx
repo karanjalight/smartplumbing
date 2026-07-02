@@ -57,7 +57,7 @@ export default function TenantsPage() {
         }
         description="Mali Smart gives tenants a clear way to pay, buy tokens, view receipts, and request help without switching between offices, calls, and chats."
         ctas={[
-          { label: "Tenant sign-in", href: "/clients/login" },
+          { label: "Tenant sign-in", href: "/auth/login" },
           { label: "See how it works", href: "/platform", variant: "ghost" },
         ]}
         trustChips={[
@@ -79,7 +79,7 @@ export default function TenantsPage() {
           { value: "24/7", label: "self-service" },
           { value: "1", label: "account view" },
         ]}
-        cta={{ label: "Open tenant portal", href: "/clients/login" }}
+        cta={{ label: "Open tenant portal", href: "/auth/login" }}
       />
       <TenantExperienceSection />
       <TestimonialsSection />

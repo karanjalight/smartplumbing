@@ -7,12 +7,15 @@ import {
   Home,
   Layers,
   MapPin,
+  Pencil,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { BuildingEditDialog } from "@/components/dashboard/building-edit-dialog";
+import { HouseDialog } from "@/components/dashboard/house-dialog";
 import { LandlordAddHouseModal } from "@/components/landlord/landlord-add-house-modal";
 import { LandlordCaretakerModal } from "@/components/landlord/landlord-caretaker-modal";
 import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
@@ -34,6 +37,7 @@ import {
   getMergedHousesForBuildingWithTenantAssignments,
   readStore,
 } from "@/lib/landlord-portfolio-storage";
+import { unitTypeLabel } from "@/lib/units/labels";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -184,6 +188,10 @@ export function BuildingDetailView({
   const [unitQuery, setUnitQuery] = useState("");
   const [caretakerOpen, setCaretakerOpen] = useState(false);
   const [addHouseOpen, setAddHouseOpen] = useState(false);
+  const [editBuildingOpen, setEditBuildingOpen] = useState(false);
+  const [houseDialogOpen, setHouseDialogOpen] = useState(false);
+  const [editingHouse, setEditingHouse] = useState<HouseUnitRow | null>(null);
+  const reloadDetail = () => setReloadKey((k) => k + 1);
 
   const building = detail.status === "ready" ? detail.building : undefined;
   const houses = detail.status === "ready" ? detail.houses : [];
@@ -289,22 +297,38 @@ export function BuildingDetailView({
 
   const tenantHrefBase =
     portal === "landlord" ? "/landlords/dashboard/tenants" : "/dashboard/tenants";
+  const unitHrefBase =
+    portal === "landlord" ? "/landlords/dashboard/units" : "/dashboard/units";
 
   const showLandlordLocalActions =
     portal === "landlord" && landlordPortalId && !isLiveDetail;
 
   return (
     <div className="space-y-8 pb-10">
-      <Link
-        href={buildingsListHref}
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground",
+      <div className="flex items-center justify-between gap-2">
+        <Link
+          href={buildingsListHref}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "-ml-2 inline-flex gap-1.5 rounded-full px-2 text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <ArrowLeft className="size-4" />
+          Back to buildings
+        </Link>
+        {isLiveDetail && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 rounded-full"
+            onClick={() => setEditBuildingOpen(true)}
+          >
+            <Pencil className="size-3.5" />
+            Edit building
+          </Button>
         )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to buildings
-      </Link>
+      </div>
 
       <header className="rounded-2xl border border-border bg-gradient-to-br from-[#0A4266]/5 via-card to-card p-6 dark:border-border/80 dark:from-[#6BB4E8]/10 md:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -411,6 +435,19 @@ export function BuildingDetailView({
                 Add house / unit
               </Button>
             )}
+            {isLiveDetail && (
+              <Button
+                type="button"
+                className="rounded-full gap-2 bg-[#0A4266] text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
+                onClick={() => {
+                  setEditingHouse(null);
+                  setHouseDialogOpen(true);
+                }}
+              >
+                <Home className="size-4" />
+                Add house
+              </Button>
+            )}
             <Input
               value={unitQuery}
               onChange={(e) => setUnitQuery(e.target.value)}
@@ -426,10 +463,12 @@ export function BuildingDetailView({
             <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-border/80">
               <tr>
                 <th className="px-4 py-3">Unit</th>
+                <th className="hidden px-4 py-3 sm:table-cell">Type</th>
                 <th className="px-4 py-3">Rent / mo</th>
                 <th className="hidden px-4 py-3 md:table-cell">Tenant</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Meter (STS)</th>
                 <th className="px-4 py-3">Notes</th>
+                {isLiveDetail && <th className="px-4 py-3 text-right">Edit</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border dark:divide-border/80">
@@ -438,7 +477,21 @@ export function BuildingDetailView({
                   key={h.id}
                   className="bg-card transition-colors hover:bg-muted/30 dark:hover:bg-muted/15"
                 >
-                  <td className="px-4 py-3 font-medium text-foreground">{h.label}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    {isLiveDetail ? (
+                      <Link
+                        href={`${unitHrefBase}/${encodeURIComponent(h.id)}`}
+                        className="text-[#0A4266] underline-offset-4 hover:underline dark:text-[#6BB4E8]"
+                      >
+                        {h.label}
+                      </Link>
+                    ) : (
+                      h.label
+                    )}
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                    {unitTypeLabel(h.unitType)}
+                  </td>
                   <td className="px-4 py-3 tabular-nums text-foreground">
                     {unitRentDisplay(h)}
                   </td>
@@ -474,6 +527,22 @@ export function BuildingDetailView({
                   <td className="max-w-xs px-4 py-3 text-muted-foreground">
                     {h.description ?? "—"}
                   </td>
+                  {isLiveDetail && (
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Edit ${h.label}`}
+                        onClick={() => {
+                          setEditingHouse(h);
+                          setHouseDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -502,6 +571,25 @@ export function BuildingDetailView({
             onClose={() => setAddHouseOpen(false)}
             building={building}
             landlordId={landlordPortalId!}
+          />
+        </>
+      )}
+
+      {isLiveDetail && (
+        <>
+          <BuildingEditDialog
+            open={editBuildingOpen}
+            onClose={() => setEditBuildingOpen(false)}
+            buildingId={buildingId}
+            onSaved={reloadDetail}
+          />
+          <HouseDialog
+            open={houseDialogOpen}
+            onClose={() => setHouseDialogOpen(false)}
+            buildingId={buildingId}
+            house={editingHouse}
+            defaultRent={building.rentModel === "per_unit" ? building.rentKes : undefined}
+            onSaved={reloadDetail}
           />
         </>
       )}

@@ -1,6 +1,10 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { TenantLedger } from "@/components/billing/tenant-ledger";
 import { TenantDetailView } from "@/components/dashboard/tenant-detail-view";
+import { buildStatement, listLedgerForTenant, type Statement } from "@/lib/billing/queries";
+import { getActiveLeaseForTenant } from "@/lib/leases/queries";
 import {
   fetchTenantDetailById,
   getTenantById,
@@ -20,6 +24,25 @@ async function resolveTenant(id: string) {
   return getTenantById(id);
 }
 
+async function resolveActiveLease(id: string) {
+  try {
+    const supabase = await getSupabaseServerClient();
+    return await getActiveLeaseForTenant(supabase, id);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveStatement(id: string): Promise<Statement | null> {
+  try {
+    const supabase = await getSupabaseServerClient();
+    const entries = await listLedgerForTenant(supabase, id);
+    return buildStatement(entries, new Date());
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const tenant = await resolveTenant(id);
@@ -35,5 +58,29 @@ export default async function TenantDetailPage({ params }: Props) {
   const { id } = await params;
   const tenant = await resolveTenant(id);
   if (!tenant) notFound();
-  return <TenantDetailView tenant={tenant} />;
+  const lease = await resolveActiveLease(id);
+  const statement = await resolveStatement(id);
+  return (
+    <>
+      {lease && (
+        <div className="px-6 pt-4">
+          <Link
+            href={`/dashboard/leases/${lease.id}`}
+            className="text-sm underline"
+          >
+            View lease {lease.code} ({lease.status})
+          </Link>
+        </div>
+      )}
+      <TenantDetailView tenant={tenant} />
+      {statement && (
+        <section className="space-y-4 p-4 md:p-6">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Billing &amp; ledger
+          </h2>
+          <TenantLedger tenantId={id} leaseId={lease?.id} statement={statement} />
+        </section>
+      )}
+    </>
+  );
 }

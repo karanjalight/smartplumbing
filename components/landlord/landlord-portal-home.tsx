@@ -6,6 +6,7 @@ import Link from "next/link";
 import { LandlordAlertsPreview } from "@/components/landlord/landlord-alerts-preview";
 import { LandlordRevenueLineChart } from "@/components/landlord/landlord-revenue-line-chart";
 import { LandlordSummaryCards } from "@/components/landlord/landlord-summary-cards";
+import type { LandlordHomeData } from "@/lib/landlord/home-data";
 import { cn } from "@/lib/utils";
 
 const QUICK_ACTIONS = [
@@ -35,7 +36,7 @@ const QUICK_ACTIONS = [
   },
 ] as const;
 
-export function LandlordPortalHome() {
+export function LandlordPortalHome({ data }: { data: LandlordHomeData }) {
   return (
     <div className="space-y-8">
       <div>
@@ -49,8 +50,8 @@ export function LandlordPortalHome() {
       </div>
 
       <div className="space-y-4">
-        <LandlordSummaryCards />
-        
+        <LandlordSummaryCards portfolio={data.portfolio} collections={data.collections} />
+
       </div>
 
 
@@ -84,10 +85,10 @@ export function LandlordPortalHome() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
-          <LandlordRevenueLineChart />
+          <LandlordRevenueLineChart data={data.collections.series} />
         </div>
         <div className="min-w-0 lg:col-span-1">
-          <LandlordAlertsPreview />
+          <LandlordAlertsPreview alerts={data.alerts} />
         </div>
       </div>
 

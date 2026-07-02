@@ -19,6 +19,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { deleteMeter, previewDeleteMeter } from "@/app/(dashboard)/dashboard/meters/actions";
+import { DeleteRowButton } from "@/components/dashboard/delete-row-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -663,6 +665,14 @@ export function MetersView() {
                         {!row.tenantId && !row.buildingId ? (
                           <span className="text-xs text-muted-foreground">—</span>
                         ) : null}
+                        <DeleteRowButton
+                          preview={() => previewDeleteMeter(row.meterId)}
+                          onDelete={() => deleteMeter(row.meterId)}
+                          title="Delete meter?"
+                          description={`Meter ${row.meterId} will be permanently deleted and unassigned from any tenant.`}
+                          successMessage="Meter deleted"
+                          onDeleted={() => setAllRows((prev) => prev.filter((r) => r.meterId !== row.meterId))}
+                        />
                       </div>
                     </td>
                   </tr>

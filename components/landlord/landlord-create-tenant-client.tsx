@@ -12,6 +12,12 @@ function LandlordCreateTenantInner() {
     searchParams.get("buildingId") ?? searchParams.get("building") ?? undefined;
   const unitId =
     searchParams.get("unitId") ?? searchParams.get("unit") ?? undefined;
+  // Only honour same-origin relative paths to avoid open-redirects.
+  const nextRaw = searchParams.get("next");
+  const successHref =
+    nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//")
+      ? nextRaw
+      : undefined;
 
   return (
     <LandlordSessionGate>
@@ -21,6 +27,7 @@ function LandlordCreateTenantInner() {
           sessionLandlord={landlord}
           initialBuildingId={buildingId || undefined}
           initialUnitId={unitId || undefined}
+          successHref={successHref}
         />
       )}
     </LandlordSessionGate>

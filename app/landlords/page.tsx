@@ -58,7 +58,7 @@ export default function LandlordsPage() {
         }
         description="Mali Smart gives landlords a cleaner way to monitor rent, utilities, tenants, maintenance, and payouts across every building."
         ctas={[
-          { label: "Landlord sign-in", href: "/landlords/login" },
+          { label: "Landlord sign-in", href: "/auth/login" },
           { label: "Talk to our team", href: "/contact", variant: "ghost" },
         ]}
         trustChips={[

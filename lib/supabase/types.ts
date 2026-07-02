@@ -157,6 +157,24 @@ export type BuildingRecurringBillRow = Timestamps & {
   notes: string | null;
 };
 
+export type UnitType =
+  | "bedsitter"
+  | "studio"
+  | "one_bedroom"
+  | "two_bedroom"
+  | "three_bedroom"
+  | "four_bedroom"
+  | "five_bedroom"
+  | "six_bedroom"
+  | "seven_bedroom"
+  | "eight_bedroom"
+  | "commercial"
+  | "office"
+  | "shop"
+  | "warehouse"
+  | "parking"
+  | "other";
+
 export type UnitRow = Timestamps & {
   id: string;
   code: string | null;
@@ -165,6 +183,15 @@ export type UnitRow = Timestamps & {
   description: string | null;
   rent_kes: number | null;
   is_vacant: boolean;
+  unit_type: UnitType | null;
+}
+
+export type UnitImageRow = {
+  id: string;
+  unit_id: string;
+  path: string;
+  sort_order: number;
+  created_at: string;
 }
 
 export type WaterPricingRow = Timestamps & {
@@ -459,6 +486,125 @@ export type PlatformSettingsRow = {
   updated_at: string;
 }
 
+// ---------- Leases -------------------------------------------------------
+
+export type LeaseStatus =
+  | "draft"
+  | "pending_signature"
+  | "active"
+  | "expired"
+  | "terminated"
+  | "cancelled";
+export type LeaseSignerRole = "tenant" | "landlord";
+
+export type LeaseTemplateRow = Timestamps & {
+  id: string;
+  landlord_id: string | null;
+  name: string;
+  description: string | null;
+  clauses: Json;
+  governing_law: string;
+  is_active: boolean;
+  version: number;
+};
+
+export type LeaseRow = Timestamps & {
+  id: string;
+  code: string | null;
+  landlord_id: string;
+  tenant_id: string;
+  building_id: string | null;
+  unit_id: string | null;
+  template_id: string | null;
+  landlord_name: string | null;
+  tenant_name: string | null;
+  tenant_national_id: string | null;
+  property_label: string | null;
+  rent_kes: number | null;
+  deposit_kes: number | null;
+  frequency: string;
+  payment_day: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  clause_overrides: Json;
+  status: LeaseStatus;
+  document_url: string | null;
+  signed_document_url: string | null;
+  signed_at: string | null;
+  terminated_at: string | null;
+  termination_reason: string | null;
+  notes: string | null;
+};
+
+export type LeaseSignatureRow = {
+  id: string;
+  lease_id: string;
+  signer_profile_id: string | null;
+  signer_role: LeaseSignerRole;
+  signer_name: string;
+  signature_path: string;
+  signed_at: string;
+  signer_ip: string | null;
+  user_agent: string | null;
+};
+
+// ---------- Ledger / billing ---------------------------------------------
+
+export type LedgerDirection = "debit" | "credit";
+export type LedgerCategory =
+  | "rent"
+  | "deposit"
+  | "water"
+  | "service_charge"
+  | "late_fee"
+  | "payment"
+  | "adjustment"
+  | "refund";
+export type LedgerSource =
+  | "manual"
+  | "rent_run"
+  | "mpesa"
+  | "paystack"
+  | "token"
+  | "system";
+
+export type LedgerEntryRow = Timestamps & {
+  id: string;
+  tenant_id: string;
+  lease_id: string | null;
+  landlord_id: string;
+  direction: LedgerDirection;
+  category: LedgerCategory;
+  amount_kes: number;
+  description: string | null;
+  period: string | null;
+  due_date: string | null;
+  source: LedgerSource;
+  reference: string | null;
+  payment_id: string | null;
+  voided: boolean;
+  created_by: string | null;
+};
+
+export type OwnerExpenseCategory =
+  | "maintenance"
+  | "repairs"
+  | "utilities"
+  | "management"
+  | "insurance"
+  | "other";
+
+export type OwnerExpenseRow = Timestamps & {
+  id: string;
+  landlord_id: string;
+  building_id: string | null;
+  category: OwnerExpenseCategory;
+  amount_kes: number;
+  description: string | null;
+  incurred_on: string;
+  created_by: string | null;
+};
+
 // ---------- Helper insert/update types -----------------------------------
 
 type Insertable<T> = Omit<T, "created_at" | "updated_at"> & {
@@ -496,7 +642,18 @@ export type Database = {
       landlords:          TableDef<LandlordRow>;
       buildings:          TableDef<BuildingRow>;
       building_recurring_bills: TableDef<BuildingRecurringBillRow>;
-      units:              TableDef<UnitRow>;
+      units: {
+        Row: UnitRow;
+        Insert: Partial<UnitRow> & { building_id: string; label: string };
+        Update: Partial<UnitRow>;
+        Relationships: EmptyRelationships;
+      };
+      unit_images: {
+        Row: UnitImageRow;
+        Insert: Partial<UnitImageRow> & { unit_id: string; path: string };
+        Update: Partial<UnitImageRow>;
+        Relationships: EmptyRelationships;
+      };
       water_pricing:      TableDef<WaterPricingRow>;
       meters:             TableDef<MeterRow>;
       tenants:            TableDef<TenantRow>;
@@ -543,6 +700,50 @@ export type Database = {
         Update: Partial<PlatformSettingsRow>;
         Relationships: EmptyRelationships;
       };
+      lease_templates: {
+        Row: LeaseTemplateRow;
+        Insert: Partial<LeaseTemplateRow> & { name: string };
+        Update: Partial<LeaseTemplateRow>;
+        Relationships: EmptyRelationships;
+      };
+      leases: {
+        Row: LeaseRow;
+        Insert: Partial<LeaseRow> & { landlord_id: string; tenant_id: string };
+        Update: Partial<LeaseRow>;
+        Relationships: EmptyRelationships;
+      };
+      lease_signatures: {
+        Row: LeaseSignatureRow;
+        Insert: Partial<LeaseSignatureRow> & {
+          lease_id: string;
+          signer_role: LeaseSignerRole;
+          signer_name: string;
+          signature_path: string;
+        };
+        Update: Partial<LeaseSignatureRow>;
+        Relationships: EmptyRelationships;
+      };
+      ledger_entries: {
+        Row: LedgerEntryRow;
+        Insert: Partial<LedgerEntryRow> & {
+          tenant_id: string;
+          landlord_id: string;
+          direction: LedgerDirection;
+          category: LedgerCategory;
+          amount_kes: number;
+        };
+        Update: Partial<LedgerEntryRow>;
+        Relationships: EmptyRelationships;
+      };
+      owner_expenses: {
+        Row: OwnerExpenseRow;
+        Insert: Partial<OwnerExpenseRow> & {
+          landlord_id: string;
+          amount_kes: number;
+        };
+        Update: Partial<OwnerExpenseRow>;
+        Relationships: EmptyRelationships;
+      };
     };
     Views: {
       tenant_directory: ViewDef<
@@ -571,6 +772,8 @@ export type Database = {
       is_landlord: { Args: Record<string, never>; Returns: boolean };
       is_tenant: { Args: Record<string, never>; Returns: boolean };
       is_staff: { Args: Record<string, never>; Returns: boolean };
+      next_lease_code: { Args: Record<string, never>; Returns: string };
+      tenant_balance_kes: { Args: { p_tenant_id: string }; Returns: number };
     };
     Enums: {
       user_role: UserRole;
@@ -580,6 +783,7 @@ export type Database = {
       payout_schedule: PayoutSchedule;
       payout_rail: PayoutRail;
       rent_model: RentModel;
+      unit_type: UnitType;
       meter_lifecycle: MeterLifecycle;
       meter_connectivity: MeterConnectivity;
       meter_model_type: MeterModelType;
@@ -597,6 +801,12 @@ export type Database = {
       order_status: OrderStatus;
       notification_category: NotificationCategory;
       notification_severity: NotificationSeverity;
+      lease_status: LeaseStatus;
+      lease_signer_role: LeaseSignerRole;
+      ledger_direction: LedgerDirection;
+      ledger_category: LedgerCategory;
+      ledger_source: LedgerSource;
+      owner_expense_category: OwnerExpenseCategory;
     };
   };
 };

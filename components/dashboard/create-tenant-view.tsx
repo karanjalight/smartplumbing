@@ -86,6 +86,13 @@ export type CreateTenantViewProps = {
   initialBuildingId?: string;
   /** Pre-select unit when `initialBuildingId` is set. */
   initialUnitId?: string;
+  /** Admin only: pre-select the landlord (e.g. from the admin onboarding flow). */
+  initialLandlordId?: string;
+  /**
+   * Optional post-create destination for guided flows (e.g. onboarding).
+   * Falls back to the tenant detail page when omitted.
+   */
+  successHref?: string;
 };
 
 export function CreateTenantView({
@@ -94,6 +101,8 @@ export function CreateTenantView({
   sessionLandlord = null,
   initialBuildingId,
   initialUnitId,
+  initialLandlordId,
+  successHref,
 }: CreateTenantViewProps = {}) {
   const router = useRouter();
   const isLandlordPortal = portal === "landlord";
@@ -342,6 +351,35 @@ export function CreateTenantView({
       cancelled = true;
     };
   }, [adminUserBuildingId, adminBuildings, isLandlordPortal]);
+
+  // Admin (onboarding) pre-selection: landlord → building → unit, each applied
+  // once as its options load. Mirrors the landlord-portal pre-select effects.
+  useEffect(() => {
+    if (isLandlordPortal || adminLandlordId) return;
+    const preferred = initialLandlordId?.trim();
+    if (!preferred || landlords.length === 0) return;
+    if (landlords.some((l) => l.id === preferred)) {
+      setAdminLandlordId(preferred);
+    }
+  }, [isLandlordPortal, initialLandlordId, landlords, adminLandlordId]);
+
+  useEffect(() => {
+    if (isLandlordPortal || adminUserBuildingId) return;
+    const preferred = initialBuildingId?.trim();
+    if (!preferred || adminBuildings.length === 0) return;
+    if (adminBuildings.some((b) => b.id === preferred)) {
+      setAdminUserBuildingId(preferred);
+    }
+  }, [isLandlordPortal, initialBuildingId, adminBuildings, adminUserBuildingId]);
+
+  useEffect(() => {
+    if (isLandlordPortal || adminHouseUnitId) return;
+    const preferred = initialUnitId?.trim();
+    if (!preferred || adminHouses.length === 0) return;
+    if (adminHouses.some((h) => h.id === preferred)) {
+      setAdminHouseUnitId(preferred);
+    }
+  }, [isLandlordPortal, initialUnitId, adminHouses, adminHouseUnitId]);
 
   useEffect(() => {
     if (!isLandlordPortal || !fixedLandlordId) {
@@ -680,7 +718,8 @@ export function CreateTenantView({
         });
         toast.success("Tenant created. Credentials PDF downloaded.");
         router.push(
-          `/landlords/dashboard/tenants/${encodeURIComponent(result.tenantId)}`
+          successHref ??
+            `/landlords/dashboard/tenants/${encodeURIComponent(result.tenantId)}`
         );
       } finally {
         setIsSubmitting(false);
@@ -752,7 +791,9 @@ export function CreateTenantView({
         waterMeterId: meterNoForApi ?? adminMeterId,
       });
       toast.success("Tenant created. Credentials PDF downloaded.");
-      router.push(`/dashboard/tenants/${encodeURIComponent(result.tenantId)}`);
+      router.push(
+        successHref ?? `/dashboard/tenants/${encodeURIComponent(result.tenantId)}`
+      );
     } finally {
       setIsSubmitting(false);
     }

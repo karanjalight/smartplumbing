@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 
 import { z } from "zod";
 
+import { buildTenantImpact } from "@/lib/delete/impact";
+import type { DeletePreviewResult } from "@/lib/delete/types";
 import { resolveLandlordId } from "@/lib/landlords-data";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requirePublicSupabaseConfig } from "@/lib/supabase/env";
@@ -421,7 +423,7 @@ export async function createTenantAccount(
   const smartoneMeta = {
     role: "tenant" as const,
     tenant_code: tenantCode,
-    tenant_portal_path: "/clients/login",
+    tenant_portal_path: "/auth/login",
     landlord_id: scopedLandlordId,
     product: "mali_smart",
   };
@@ -760,4 +762,49 @@ export async function deleteTenantRecord(input: unknown): Promise<ActionResult> 
 
   revalidateTenantPaths(tenantId);
   return { ok: true };
+}
+
+const previewDeleteTenantSchema = z.object({
+  tenantId: uuidSchema,
+  landlordId: z.string().min(1, "Landlord is required."),
+});
+
+/** Count what deleting a tenant will affect (unit freed, login removed, leases, payments, tokens). */
+export async function previewDeleteTenant(input: unknown): Promise<DeletePreviewResult> {
+  const parsed = previewDeleteTenantSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { tenantId, landlordId: landlordIdOrCode } = parsed.data;
+
+  const actor = await assertPortfolioActor(landlordIdOrCode);
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+  const scopedLandlordId = actor.landlordId;
+
+  const { data: existing } = await admin
+    .from("tenants")
+    .select("id, landlord_id, unit_id, profile_id")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (!existing || existing.landlord_id !== scopedLandlordId) {
+    return { ok: false, error: "Tenant not found." };
+  }
+
+  const [leases, payments, tokens] = await Promise.all([
+    admin.from("leases").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+    admin.from("payments").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+    admin.from("token_purchases").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+  ]);
+
+  return {
+    ok: true,
+    impact: buildTenantImpact({
+      unitFreed: existing.unit_id ? 1 : 0,
+      authUser: existing.profile_id ? 1 : 0,
+      leases: leases.count ?? 0,
+      payments: payments.count ?? 0,
+      tokens: tokens.count ?? 0,
+    }),
+  };
 }

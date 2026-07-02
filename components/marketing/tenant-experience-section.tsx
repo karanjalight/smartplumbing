@@ -3,6 +3,7 @@
 import { CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
+import { InstallAppButton } from "@/components/marketing/install-app-button";
 import { MobileMockup } from "@/components/marketing/mobile-mockup";
 import {
   FadeChild,
@@ -137,9 +138,15 @@ export function TenantExperienceSection() {
               ))}
             </StaggerGroup>
 
-            <FadeUp delay={0.2} className="mt-8 inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-emerald-500" />
-              Works offline · installs in 3 seconds
+            <FadeUp delay={0.2} className="mt-8 flex flex-wrap items-center gap-3">
+              <InstallAppButton
+                fallbackHref="/sign-up"
+                className="group inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#0A4266] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#083350] dark:bg-[#6BB4E8] dark:text-[#062538] dark:hover:bg-[#7AB8D9]"
+              />
+              <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-emerald-500" />
+                Works offline · installs in 3 seconds
+              </span>
             </FadeUp>
           </div>
         </div>

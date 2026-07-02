@@ -1,7 +1,90 @@
 "use server";
 
+import { dashboardPathForRole } from "@/lib/auth/routes";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requirePublicSupabaseConfig } from "@/lib/supabase/env";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import type { UserRole } from "@/lib/supabase/types";
+
+export type SignInWithPasswordResult =
+  | { ok: true; redirectTo: string }
+  | {
+      ok: false;
+      passwordMessage?: string;
+      formError?: string;
+    };
+
+/**
+ * The single source of truth for authentication. Verifies email/password on
+ * the server, then routes the user to the dashboard for their role — one login
+ * for admins, landlords, and tenants.
+ *
+ * Runs server-side (via @supabase/ssr) so session cookies are written on the
+ * server and the browser never makes a cross-origin request to the auth host.
+ */
+export async function signInWithEmailPassword(input: {
+  email: string;
+  password: string;
+}): Promise<SignInWithPasswordResult> {
+  const email = input.email.trim().toLowerCase();
+  const password = input.password;
+
+  if (!email || !password) {
+    return {
+      ok: false,
+      passwordMessage: "Email and password are required.",
+    };
+  }
+
+  try {
+    requirePublicSupabaseConfig();
+  } catch (e) {
+    return {
+      ok: false,
+      formError:
+        e instanceof Error
+          ? e.message
+          : "Supabase is not configured. See docs/SUPABASE.md.",
+    };
+  }
+
+  const supabase = await getSupabaseServerClient();
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    return { ok: false, passwordMessage: error.message };
+  }
+
+  const user = data.user;
+  if (!user) {
+    return {
+      ok: false,
+      passwordMessage: "No user was returned from sign-in. Try again.",
+    };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    await supabase.auth.signOut();
+    return {
+      ok: false,
+      formError:
+        profileError.message || "Could not load your profile. Try again.",
+    };
+  }
+
+  const role = (profile?.role ?? "tenant") as UserRole;
+  return { ok: true, redirectTo: dashboardPathForRole(role) };
+}
 
 export type SignUpAdminResult =
   | { ok: true }

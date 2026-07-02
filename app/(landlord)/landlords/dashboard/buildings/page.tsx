@@ -14,7 +14,7 @@ export default async function LandlordBuildingsPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
   const { data: profile } = await supabase
     .from("profiles")
@@ -22,7 +22,7 @@ export default async function LandlordBuildingsPage() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "landlord") {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
   const { data: landlord } = await supabase
     .from("landlords")
@@ -30,7 +30,7 @@ export default async function LandlordBuildingsPage() {
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!landlord?.id) {
-    redirect("/landlords/login");
+    redirect("/auth/login");
   }
   return <LandlordBuildingsView landlordId={landlord.id} />;
 }

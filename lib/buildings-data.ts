@@ -5,7 +5,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/lib/supabase/types";
+import type { Database, UnitType } from "@/lib/supabase/types";
 import { resolveLandlordId } from "@/lib/landlords-data";
 import { MOCK_LANDLORDS, MOCK_TENANTS } from "@/lib/tenants-data";
 
@@ -49,6 +49,7 @@ export type HouseUnitRow = {
   description: string | null;
   /** Per-unit monthly rent (KES) when set; otherwise UI falls back to building default. */
   rentKes?: number | null;
+  unitType?: UnitType | null;
   meterId: string | null;
   tenantId: string | null;
   tenantName: string | null;
@@ -273,7 +274,7 @@ export async function loadBuildingDetailFromSupabase(
 
   const { data: units, error: uErr } = await supabase
     .from("units")
-    .select("id, label, description, rent_kes, is_vacant")
+    .select("id, label, description, rent_kes, is_vacant, unit_type")
     .eq("building_id", buildingId)
     .order("label", { ascending: true });
 
@@ -346,6 +347,7 @@ export async function loadBuildingDetailFromSupabase(
       label: u.label,
       description: desc,
       rentKes: rentKes && rentKes > 0 ? rentKes : null,
+      unitType: u.unit_type ?? null,
       meterId,
       tenantId: tenant?.id ?? null,
       tenantName: tenant?.full_name ?? null,

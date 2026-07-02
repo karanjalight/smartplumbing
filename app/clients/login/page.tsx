@@ -1,11 +1,6 @@
-import { ClientLoginForm } from "@/components/client/client-login-form";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Client login — Mali Smart",
-  description:
-    "Sign in to your client account to manage water bills, rent tracking, and payments.",
-};
-
+/** Tenants/clients now sign in through the single central login. */
 export default function ClientsLoginPage() {
-  return <ClientLoginForm />;
+  redirect("/auth/login");
 }

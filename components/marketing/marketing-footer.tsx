@@ -35,8 +35,8 @@ const FOOTER_COLUMNS = [
     heading: "Account",
     links: [
       { label: "Sign in", href: "/auth/login" },
-      { label: "Resident sign-in", href: "/clients/login" },
-      { label: "Landlord sign-in", href: "/landlords/login" },
+      { label: "Resident sign-in", href: "/auth/login" },
+      { label: "Landlord sign-in", href: "/auth/login" },
       { label: "Get started", href: "/sign-up" },
     ],
   },

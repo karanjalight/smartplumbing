@@ -6,6 +6,16 @@ import { z } from "zod";
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { RecurringBillFrequency, RentModel } from "@/lib/supabase/types";
+import { revalidatePath } from "next/cache";
+
+import { buildBuildingImpact } from "@/lib/delete/impact";
+import type { DeletePreviewResult } from "@/lib/delete/types";
+import { assertAdmin } from "@/lib/supabase/authz";
+
+const UNIT_TYPE_VALUES = [
+  "bedsitter", "studio", "one_bedroom", "two_bedroom", "three_bedroom",
+  "four_bedroom", "five_bedroom", "six_bedroom", "seven_bedroom", "eight_bedroom",
+] as const;
 
 const unitInput = z.object({
   label: z.string().min(1, "Each house needs a label."),
@@ -13,6 +23,8 @@ const unitInput = z.object({
   rentKes: z.number().nonnegative().nullable().optional(),
   /** Optional meter to assign to this unit after creation. */
   meterId: z.string().uuid().nullable().optional(),
+  /** Optional house classification (bedsitter / studio / N-bedroom). */
+  unitType: z.enum(UNIT_TYPE_VALUES).nullable().optional(),
 });
 
 const recurringBillInput = z.object({
@@ -205,6 +217,7 @@ export async function createBuildingWithUnits(
     label: u.label.trim(),
     description: null as string | null,
     rent_kes: data.sameRentAll ? null : (u.rentKes ?? null),
+    unit_type: u.unitType ?? null,
     is_vacant: true,
   }));
 
@@ -335,4 +348,211 @@ export async function createBuildingWithUnits(
   }
 
   return { ok: true, buildingId };
+}
+
+// ---------- Edit an existing building & its houses ------------------------
+
+export type BuildingActionResult = { ok: true } | { ok: false; error: string };
+
+const updateBuildingInput = z.object({
+  buildingId: z.string().uuid(),
+  name: z.string().min(1, "Building name is required."),
+  addressLine: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  region: z.string().nullable().optional(),
+  caretakerName: z.string().nullable().optional(),
+  caretakerPhone: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  rentKes: z.number().nonnegative().optional(),
+  managementFeePct: z.number().min(0).max(100).nullable().optional(),
+});
+
+/** Updates a building's details. RLS limits this to admins and the owner. */
+export async function updateBuilding(input: unknown): Promise<BuildingActionResult> {
+  const parsed = updateBuildingInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const patch = {
+    name: d.name.trim(),
+    address_line: d.addressLine?.trim() || null,
+    city: d.city?.trim() || null,
+    region: d.region?.trim() || null,
+    caretaker_name: d.caretakerName?.trim() || null,
+    caretaker_phone: d.caretakerPhone?.trim() || null,
+    notes: d.notes?.trim() || null,
+    ...(d.rentKes !== undefined ? { rent_kes: d.rentKes } : {}),
+    ...(d.managementFeePct !== undefined ? { management_fee_pct: d.managementFeePct } : {}),
+  };
+  const { error } = await supabase.from("buildings").update(patch).eq("id", d.buildingId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+const addHouseInput = z.object({
+  buildingId: z.string().uuid(),
+  label: z.string().min(1, "House label is required."),
+  rentKes: z.number().nonnegative().nullable().optional(),
+  description: z.string().nullable().optional(),
+  unitType: z.enum(UNIT_TYPE_VALUES).nullable().optional(),
+});
+
+/** Adds a single house (unit) to an existing building and bumps house_count. */
+export async function addHouseToBuilding(input: unknown): Promise<BuildingActionResult> {
+  const parsed = addHouseInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const { data: building } = await supabase
+    .from("buildings").select("id, house_count").eq("id", d.buildingId).maybeSingle();
+  if (!building) return { ok: false, error: "Building not found." };
+
+  const label = d.label.trim();
+  const { data: existing } = await supabase
+    .from("units").select("id").eq("building_id", d.buildingId).ilike("label", label);
+  if (existing && existing.length > 0) {
+    return { ok: false, error: `A house labelled "${label}" already exists.` };
+  }
+
+  const { error } = await supabase.from("units").insert({
+    building_id: d.buildingId,
+    label,
+    description: d.description?.trim() || null,
+    rent_kes: d.rentKes ?? null,
+    unit_type: d.unitType ?? null,
+    is_vacant: true,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await supabase
+    .from("buildings")
+    .update({ house_count: (building.house_count ?? 0) + 1 })
+    .eq("id", d.buildingId);
+  return { ok: true };
+}
+
+const updateUnitInput = z.object({
+  unitId: z.string().uuid(),
+  label: z.string().min(1).optional(),
+  rentKes: z.number().nonnegative().nullable().optional(),
+  description: z.string().nullable().optional(),
+  isVacant: z.boolean().optional(),
+  unitType: z.enum(UNIT_TYPE_VALUES).nullable().optional(),
+});
+
+/** Edits a single house (unit). */
+export async function updateUnit(input: unknown): Promise<BuildingActionResult> {
+  const parsed = updateUnitInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const patch = {
+    ...(d.label !== undefined ? { label: d.label.trim() } : {}),
+    ...(d.rentKes !== undefined ? { rent_kes: d.rentKes } : {}),
+    ...(d.description !== undefined ? { description: d.description?.trim() || null } : {}),
+    ...(d.isVacant !== undefined ? { is_vacant: d.isVacant } : {}),
+    ...(d.unitType !== undefined ? { unit_type: d.unitType } : {}),
+  };
+  const { error } = await supabase.from("units").update(patch).eq("id", d.unitId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Removes a house (unit) and recounts the building's house_count. */
+export async function deleteUnit(unitId: string): Promise<BuildingActionResult> {
+  if (typeof unitId !== "string" || !/^[0-9a-f-]{36}$/i.test(unitId)) {
+    return { ok: false, error: "Invalid house." };
+  }
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const { data: unit } = await supabase
+    .from("units").select("building_id").eq("id", unitId).maybeSingle();
+  if (!unit) return { ok: false, error: "House not found." };
+
+  const { error } = await supabase.from("units").delete().eq("id", unitId);
+  if (error) return { ok: false, error: error.message };
+
+  const { count } = await supabase
+    .from("units").select("id", { count: "exact", head: true })
+    .eq("building_id", unit.building_id);
+  await supabase
+    .from("buildings").update({ house_count: count ?? 0 }).eq("id", unit.building_id);
+  return { ok: true };
+}
+
+const BUILDING_UUID_RE = /^[0-9a-f-]{36}$/i;
+
+/** Count what deleting a building will affect (units deleted, meters/tenants unassigned). */
+export async function previewDeleteBuilding(buildingId: string): Promise<DeletePreviewResult> {
+  if (typeof buildingId !== "string" || !BUILDING_UUID_RE.test(buildingId)) {
+    return { ok: false, error: "Invalid building." };
+  }
+  const actor = await assertAdmin();
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+
+  const { data: existing } = await admin
+    .from("buildings")
+    .select("id")
+    .eq("id", buildingId)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: "Building not found." };
+
+  const [units, meters, tenants] = await Promise.all([
+    admin.from("units").select("id", { count: "exact", head: true }).eq("building_id", buildingId),
+    admin.from("meters").select("id", { count: "exact", head: true }).eq("building_id", buildingId),
+    admin.from("tenants").select("id", { count: "exact", head: true }).eq("building_id", buildingId),
+  ]);
+
+  return {
+    ok: true,
+    impact: buildBuildingImpact({
+      units: units.count ?? 0,
+      meters: meters.count ?? 0,
+      tenants: tenants.count ?? 0,
+    }),
+  };
+}
+
+/** Delete a building. DB cascades units; sets meters/tenants building_id to null. */
+export async function deleteBuilding(buildingId: string): Promise<BuildingActionResult> {
+  if (typeof buildingId !== "string" || !BUILDING_UUID_RE.test(buildingId)) {
+    return { ok: false, error: "Invalid building." };
+  }
+  const actor = await assertAdmin();
+  if (!actor.ok) return { ok: false, error: actor.error };
+  const admin = actor.admin;
+
+  const { data: existing } = await admin
+    .from("buildings")
+    .select("id")
+    .eq("id", buildingId)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: "Building not found." };
+
+  const { error } = await admin.from("buildings").delete().eq("id", buildingId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/dashboard/buildings");
+  revalidatePath("/dashboard/units");
+  revalidatePath("/dashboard/meters");
+  revalidatePath("/dashboard/tenants");
+  return { ok: true };
 }

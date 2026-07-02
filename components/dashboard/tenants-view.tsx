@@ -16,6 +16,8 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
+import { DeleteRowButton } from "@/components/dashboard/delete-row-button";
+import { deleteTenantRecord, previewDeleteTenant } from "@/app/(dashboard)/dashboard/tenants/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -681,14 +683,23 @@ export function TenantsView() {
                         <TenantStatusBadge status={row.status} />
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/dashboard/tenants/${encodeURIComponent(row.id)}`}
-                          className={cn(
-                            "inline-flex h-7 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-muted dark:border-border/80"
-                          )}
-                        >
-                          View Details
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/dashboard/tenants/${encodeURIComponent(row.id)}`}
+                            className={cn(
+                              "inline-flex h-7 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-muted dark:border-border/80"
+                            )}
+                          >
+                            View Details
+                          </Link>
+                          <DeleteRowButton
+                            preview={() => previewDeleteTenant({ tenantId: row.id, landlordId: row.landlordId })}
+                            onDelete={() => deleteTenantRecord({ tenantId: row.id, landlordId: row.landlordId })}
+                            title="Delete tenant?"
+                            description={`"${row.name}" will be removed and their login deleted.`}
+                            successMessage="Tenant deleted"
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

@@ -15,6 +15,8 @@ import {
   Home,
   Layers,
   LayoutGrid,
+  Rocket,
+  ScrollText,
   Settings,
   SlidersHorizontal,
   Users,
@@ -45,12 +47,25 @@ const menuGroups: MenuGroup[] = [
     items: [{ href: "/landlords/dashboard", label: "Dashboard", icon: LayoutGrid }],
   },
   {
+    id: "onboarding",
+    title: "Onboarding",
+    icon: Rocket,
+    items: [
+      {
+        href: "/landlords/dashboard/onboarding",
+        label: "Get started",
+        icon: Rocket,
+      },
+    ],
+  },
+  {
     id: "properties",
     title: "Portfolio",
     icon: Building2,
     items: [
       { href: "/landlords/dashboard/buildings", label: "Buildings", icon: Layers },
       { href: "/landlords/dashboard/tenants", label: "Tenants", icon: Users },
+      { href: "/landlords/dashboard/leases", label: "Leases", icon: ScrollText },
     ],
   },
   {

@@ -1,16 +1,6 @@
-import { AuthPageShell } from "@/components/auth-page-shell";
-import { LandlordLoginForm } from "@/components/landlord/landlord-login-form";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Landlord sign in — Mali Smart",
-  description:
-    "Sign in to the landlord portal to manage buildings, tenants, meters, and billing.",
-};
-
+/** The landlord portal now uses the single central login. */
 export default function LandlordsLoginPage() {
-  return (
-    <AuthPageShell>
-      <LandlordLoginForm />
-    </AuthPageShell>
-  );
+  redirect("/auth/login");
 }

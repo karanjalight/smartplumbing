@@ -25,6 +25,7 @@ import type {
   TenantRow,
   TokenPurchaseRow,
   UnitRow,
+  UnitType,
   WaterPricingRow,
 } from "@/lib/supabase/types";
 
@@ -92,6 +93,83 @@ export async function listUnitsForBuilding(
     .order("label", { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+/** A unit enriched with its building + occupancy, for the admin Units list. */
+export type AdminUnitListRow = {
+  id: string;
+  code: string | null;
+  label: string;
+  unitType: UnitType | null;
+  /** Per-unit rent override (null → falls back to the building default). */
+  rentKes: number | null;
+  /** Rent actually charged: unit override, else the building default. */
+  effectiveRentKes: number | null;
+  isVacant: boolean;
+  buildingId: string;
+  buildingName: string;
+  landlordId: string | null;
+  occupied: boolean;
+  occupantName: string | null;
+};
+
+/**
+ * Every unit across the system, joined to its building and occupancy — for the
+ * admin Units view. Joined in JS (not via relational select) to stay within the
+ * hand-written `Database` types. Admin RLS returns all rows.
+ */
+export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> {
+  const [unitsRes, buildingsRes, tenantsRes] = await Promise.all([
+    client.from("units").select("*"),
+    client.from("buildings").select("*"),
+    client.from("tenants").select("*"),
+  ]);
+  if (unitsRes.error) throw unitsRes.error;
+  if (buildingsRes.error) throw buildingsRes.error;
+  if (tenantsRes.error) throw tenantsRes.error;
+
+  const buildings = new Map<string, BuildingRow>(
+    (buildingsRes.data ?? []).map((b) => [b.id, b])
+  );
+  const tenantsByUnit = new Map<string, TenantRow[]>();
+  for (const t of tenantsRes.data ?? []) {
+    if (!t.unit_id) continue;
+    const arr = tenantsByUnit.get(t.unit_id) ?? [];
+    arr.push(t);
+    tenantsByUnit.set(t.unit_id, arr);
+  }
+
+  const rows: AdminUnitListRow[] = (unitsRes.data ?? []).map((u) => {
+    const building = buildings.get(u.building_id) ?? null;
+    const unitTenants = tenantsByUnit.get(u.id) ?? [];
+    const activeTenant = unitTenants.find((t) => t.status !== "inactive");
+    const occupied = activeTenant
+      ? true
+      : unitTenants.length === 0
+        ? !u.is_vacant
+        : false;
+    return {
+      id: u.id,
+      code: u.code,
+      label: u.label,
+      unitType: u.unit_type,
+      rentKes: u.rent_kes,
+      effectiveRentKes: u.rent_kes ?? building?.rent_kes ?? null,
+      isVacant: u.is_vacant,
+      buildingId: u.building_id,
+      buildingName: building?.name ?? "—",
+      landlordId: building?.landlord_id ?? null,
+      occupied,
+      occupantName: activeTenant?.full_name ?? null,
+    };
+  });
+
+  rows.sort(
+    (a, b) =>
+      a.buildingName.localeCompare(b.buildingName) ||
+      a.label.localeCompare(b.label)
+  );
+  return rows;
 }
 
 // ---------- Tenants -------------------------------------------------------

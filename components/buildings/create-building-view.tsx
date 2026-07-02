@@ -27,7 +27,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { RecurringBillFrequency } from "@/lib/supabase/types";
+import type { RecurringBillFrequency, UnitType } from "@/lib/supabase/types";
+import { UNIT_TYPE_LABEL, UNIT_TYPE_ORDER } from "@/lib/units/labels";
 import { cn } from "@/lib/utils";
 
 const DROPDOWN_TRIGGER =
@@ -70,6 +71,7 @@ type HouseRow = {
   label: string;
   rentKes: string;
   meterId: string | null;
+  unitType: UnitType | "";
 };
 
 const BILL_FREQUENCY_OPTIONS: { value: RecurringBillFrequency; label: string }[] =
@@ -83,9 +85,22 @@ export type CreateBuildingViewProps = {
   variant: "admin" | "landlord";
   /** After success, e.g. `/dashboard/buildings` or `/landlords/dashboard/buildings` */
   listHref: string;
+  /**
+   * Optional post-create destination for guided flows (e.g. onboarding). May
+   * contain the token `:id`, replaced with the new building id. Falls back to
+   * `listHref` when omitted.
+   */
+  successHref?: string;
+  /** Admin only: pre-select the landlord this building is being created for. */
+  initialLandlordId?: string;
 };
 
-export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProps) {
+export function CreateBuildingView({
+  variant,
+  listHref,
+  successHref,
+  initialLandlordId,
+}: CreateBuildingViewProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -101,7 +116,9 @@ export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProp
 
   const [landlordMenuOpen, setLandlordMenuOpen] = useState(false);
   const [landlordQuery, setLandlordQuery] = useState("");
-  const [landlordId, setLandlordId] = useState("");
+  const [landlordId, setLandlordId] = useState(
+    variant === "admin" ? (initialLandlordId ?? "") : ""
+  );
   const [landlordOptions, setLandlordOptions] = useState<LandlordOption[]>([]);
   const [landlordsLoaded, setLandlordsLoaded] = useState(variant !== "admin");
   const landlordMenuRef = useRef<HTMLDivElement>(null);
@@ -109,7 +126,7 @@ export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProp
   const [sameRentAll, setSameRentAll] = useState(true);
   const [unifiedRentKes, setUnifiedRentKes] = useState("");
   const [houses, setHouses] = useState<HouseRow[]>(() => [
-    { key: newRowKey(), label: "Unit 1", rentKes: "", meterId: null },
+    { key: newRowKey(), label: "Unit 1", rentKes: "", meterId: null, unitType: "" },
   ]);
   const [managementFeePct, setManagementFeePct] = useState("");
   const [recurringBills, setRecurringBills] = useState<RecurringBillRow[]>(() => [
@@ -298,6 +315,7 @@ export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProp
         label: `Unit ${prev.length + 1}`,
         rentKes: "",
         meterId: null,
+        unitType: "",
       },
     ]);
   };
@@ -373,6 +391,7 @@ export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProp
           label: h.label.trim(),
           rentKes: sameRentAll ? null : parseMoneyInput(h.rentKes),
           meterId: h.meterId || null,
+          unitType: h.unitType || null,
         })),
       };
 
@@ -382,7 +401,10 @@ export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProp
         return;
       }
       toast.success("Building and houses created.");
-      router.push(listHref);
+      const dest = successHref
+        ? successHref.replace(":id", result.buildingId)
+        : listHref;
+      router.push(dest);
       router.refresh();
     } finally {
       setSubmitting(false);
@@ -787,6 +809,26 @@ export function CreateBuildingView({ variant, listHref }: CreateBuildingViewProp
                         placeholder={`e.g. Unit ${index + 1}`}
                         className="h-11 rounded-lg"
                       />
+                    </div>
+                    <div className="w-full space-y-2 sm:max-w-[180px]">
+                      <Label htmlFor={`type-${h.key}`}>Type</Label>
+                      <select
+                        id={`type-${h.key}`}
+                        value={h.unitType}
+                        onChange={(e) =>
+                          updateHouse(h.key, {
+                            unitType: e.target.value as UnitType | "",
+                          })
+                        }
+                        className={cn(DROPDOWN_TRIGGER, "h-11")}
+                      >
+                        <option value="">Unspecified</option>
+                        {UNIT_TYPE_ORDER.map((t) => (
+                          <option key={t} value={t}>
+                            {UNIT_TYPE_LABEL[t]}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     {!sameRentAll && (
                       <div className="w-full space-y-2 sm:max-w-[200px]">

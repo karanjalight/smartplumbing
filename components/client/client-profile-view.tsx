@@ -73,7 +73,7 @@ export function ClientProfileView({
       router.refresh();
     }
     toast.success("Signed out");
-    router.push("/clients/login");
+    router.push("/auth/login");
   }
 
   return (

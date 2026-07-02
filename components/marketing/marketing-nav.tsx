@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuthNav } from "@/hooks/use-auth-nav";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
@@ -45,9 +46,14 @@ type MarketingNavProps = {
 export function MarketingNav({ variant = "default" }: MarketingNavProps) {
   const [scrolled, setScrolled] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  const { signedIn, dashboardHref } = useAuthNav();
   const isOverlay = variant === "overlay";
   /** Show the overlay (white-on-dark) treatment only at the top of the page. */
   const onDark = isOverlay && !scrolled && !open;
+
+  /** Signed-in visitors go to their dashboard; everyone else signs in. */
+  const authHref = signedIn && dashboardHref ? dashboardHref : "/auth/login";
+  const authLabel = signedIn ? "Dashboard" : "Sign in";
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -89,11 +95,13 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full transition-colors duration-300",
+        "sticky top-0 z-50 w-full transition-[background-color,backdrop-filter,border-color] duration-300",
         scrolled || open
           ? "border-b border-border/70 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70"
           : isOverlay
-            ? "border-b border-white/10 bg-transparent"
+            ? // Blends into the hero photo: a top-down scrim keeps the white
+              // logo + links legible, then fades to transparent at the edge.
+              "border-b border-transparent bg-gradient-to-b from-black/55 via-black/25 to-transparent"
             : "border-b border-transparent bg-transparent"
       )}
       role="banner"
@@ -111,7 +119,12 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
         >
           <BrandLogo
             variant="compact"
-            imageClassName="h-24 w-auto sm:h-36 dark:invert"
+            imageClassName={cn(
+              "h-24 w-auto sm:h-36",
+              // Over the hero photo the logo must read light in either theme;
+              // otherwise follow the theme (dark logo on the frosted light nav).
+              onDark ? "invert" : "dark:invert"
+            )}
             withSurface={false}
           />
           {/* <span
@@ -183,7 +196,7 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
               )}
             />
             <Link
-              href="/auth/login"
+              href={authHref}
               className={cn(
                 "hidden h-10 items-center justify-center rounded-full border px-4 text-sm font-semibold transition-colors sm:inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 onDark
@@ -191,7 +204,7 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
                   : "border-border bg-background text-foreground hover:bg-muted focus-visible:ring-[#0A4266] dark:focus-visible:ring-[#7AB8D9]"
               )}
             >
-              Sign in
+              {authLabel}
             </Link>
             <Link
               href="/book-demo"
@@ -271,11 +284,11 @@ export function MarketingNav({ variant = "default" }: MarketingNavProps) {
             ))}
             <div className="mt-2 flex items-center gap-2 border-t border-border pt-4">
               <Link
-                href="/auth/login"
+                href={authHref}
                 onClick={() => setOpen(false)}
                 className="inline-flex h-11 flex-1 items-center justify-center rounded-full border border-border bg-background text-sm font-semibold text-foreground"
               >
-                Sign in
+                {authLabel}
               </Link>
               <ThemeToggle className="size-11" />
             </div>

@@ -45,7 +45,7 @@ export function ClientIntroPager() {
 
   const handleNext = () => {
     if (isLastSlide) {
-      router.push("/clients/login");
+      router.push("/auth/login");
       return;
     }
 
@@ -64,7 +64,7 @@ export function ClientIntroPager() {
             <div className="flex items-center gap-2">
               <ThemeToggle className="size-9 min-h-9 min-w-9 rounded-full [&_svg]:size-4" />
               <Link
-                href="/clients/login"
+                href="/auth/login"
                 className="text-xs font-medium text-muted-foreground underline decoration-2 underline-offset-3"
               >
                 Skip

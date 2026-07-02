@@ -16,6 +16,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { deleteLandlord, previewDeleteLandlord } from "@/app/(dashboard)/dashboard/landlords/actions";
+import { DeleteRowButton } from "@/components/dashboard/delete-row-button";
 import { LandlordStatusBadge } from "@/components/dashboard/landlord-status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -669,15 +671,27 @@ export function LandlordsView() {
                       )}
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <Link
-                        href={`/dashboard/landlords/${encodeURIComponent(row.id)}`}
-                        className={cn(
-                          buttonVariants({ variant: "outline", size: "sm" }),
-                          "h-7 rounded-full px-3 text-xs"
-                        )}
-                      >
-                        View
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/dashboard/landlords/${encodeURIComponent(row.id)}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "h-7 rounded-full px-3 text-xs"
+                          )}
+                        >
+                          View
+                        </Link>
+                        <DeleteRowButton
+                          preview={() => previewDeleteLandlord(row.id)}
+                          onDelete={() => deleteLandlord(row.id)}
+                          title="Delete landlord and entire portfolio?"
+                          description={`This permanently deletes "${row.company}" with all its buildings, houses, tenants (and their logins), and payouts.`}
+                          confirmLabel="Delete everything"
+                          requireConfirmText={row.company}
+                          successMessage="Landlord deleted"
+                          onDeleted={() => setAllRows((prev) => prev.filter((r) => r.id !== row.id))}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))

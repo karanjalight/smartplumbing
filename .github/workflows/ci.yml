@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      # Advisory until the repo's pre-existing lint debt is cleared.
+      # New lease code is lint-clean; flip this to a hard gate once the
+      # legacy errors are fixed.
+      - run: npm run lint
+        continue-on-error: true
