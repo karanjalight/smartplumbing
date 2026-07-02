@@ -3,6 +3,7 @@
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
+import { InstallAppButton } from "@/components/marketing/install-app-button";
 import { FadeUp } from "@/components/marketing/motion-primitives";
 
 const POINTS = [
@@ -96,12 +97,10 @@ export function CtaSection() {
                     aria-hidden
                   />
                 </Link>
-                <Link
-                  href="/auth/login"
-                  className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 bg-white/[0.05] px-6 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/10"
-                >
-                  Sign in to your workspace
-                </Link>
+                <InstallAppButton
+                  fallbackHref="/sign-up"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/25 bg-white/[0.05] px-6 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/10"
+                />
               </FadeUp>
             </div>
 

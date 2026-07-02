@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowRight, Droplets, Star, TrendingUp } from "lucide-react";
+import { ArrowRight, ChevronDown, Droplets, Star, TrendingUp } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import { HeroCarousel } from "@/components/marketing/hero-carousel";
+import { InstallAppButton } from "@/components/marketing/install-app-button";
 import { FadeUp, Floating } from "@/components/marketing/motion-primitives";
 import { HERO_AVATARS, HERO_BACKDROPS } from "@/lib/marketing-images";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ export function HeroSection() {
             </FadeUp>
 
             <FadeUp delay={0.06} className="mt-6">
-              <h1 className="text-balance text-4xl font-semibold leading-[1.04] tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-7xl">
+              <h1 className="text-balance text-4xl font-semibold leading-[1.04] tracking-tight text-white sm:text-4xl lg:text-5xl xl:text-6xl">
                 Collect rent and bill water —{" "}
                 <span className="text-[#7AB8D9]">automatically, on M-Pesa</span>.
               </h1>
@@ -57,21 +58,29 @@ export function HeroSection() {
               delay={0.18}
               className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4"
             >
-              <Link
-                href="/sign-up"
+              <InstallAppButton
+                fallbackHref="/sign-up"
                 className="group inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-[#062538] shadow-lg shadow-black/20 transition-all hover:bg-[#e8f2fa] hover:shadow-xl"
+              />
+              <Link
+                href="/book-demo"
+                className="group inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/25 bg-white/10 px-6 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20"
               >
-                Start with your portfolio
+                Book a demo
                 <ArrowRight
                   className="size-4 transition-transform group-hover:translate-x-0.5"
                   aria-hidden
                 />
               </Link>
+            </FadeUp>
+
+            <FadeUp delay={0.22} className="mt-5">
               <Link
                 href="#how-it-works"
-                className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 bg-white/10 px-6 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20"
+                className="inline-flex items-center gap-1 text-sm font-medium text-white/70 transition-colors hover:text-white"
               >
                 See how it works
+                <ChevronDown className="size-4" aria-hidden />
               </Link>
             </FadeUp>
 
