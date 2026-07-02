@@ -37,7 +37,11 @@ export function ConfirmDeleteDialog({
   const [confirmText, setConfirmText] = useState("");
 
   useEffect(() => {
-    if (!open) setConfirmText("");
+    if (!open) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setConfirmText("");
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
   }, [open]);
 
   if (!open) return null;
