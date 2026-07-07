@@ -76,6 +76,16 @@ export async function POST(request: Request) {
   }
 
   const admin = getSupabaseAdminClient();
+
+  const { data: tenantOwner } = await admin
+    .from("tenants").select("profile_id").eq("id", tenantId).maybeSingle();
+  if (!tenantOwner || tenantOwner.profile_id !== auth.user.id) {
+    return NextResponse.json(
+      { ok: false, error: "You can only pay rent for your own account." },
+      { status: 403 }
+    );
+  }
+
   try {
     const result = await recordRentPayment(admin, {
       tenantId,
@@ -88,8 +98,6 @@ export async function POST(request: Request) {
       paymentId: result.paymentId,
       alreadyProcessed: result.alreadyProcessed,
       gross: grossKes,
-      commissionKes: result.split?.commissionKes ?? null,
-      netToLandlordKes: result.split?.netToLandlordKes ?? null,
       balance: result.balance,
     });
   } catch (err) {

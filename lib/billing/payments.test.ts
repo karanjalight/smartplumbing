@@ -55,6 +55,8 @@ describe("buildCommissionInsert", () => {
 /** Minimal in-memory fake of the Supabase methods recordRentPayment uses. */
 function makeFakeClient(opts: {
   existingPayment?: { id: string } | null;
+  existingLedger?: { id: string } | null;
+  existingCommission?: { id: string } | null;
   tenant?: { id: string; landlord_id: string | null; building_id: string | null };
   building?: { management_fee_pct: number | null };
   lease?: { id: string } | null;
@@ -75,6 +77,10 @@ function makeFakeClient(opts: {
         limit() { return this; },
         maybeSingle() {
           if (table === "payments") return { data: opts.existingPayment ?? null, error: null };
+          if (table === "ledger_entries") return { data: opts.existingLedger ?? null, error: null };
+          if (table === "payment_commissions") {
+            return { data: opts.existingCommission ?? null, error: null };
+          }
           if (table === "tenants") return { data: opts.tenant ?? null, error: null };
           if (table === "buildings") return { data: opts.building ?? null, error: null };
           if (table === "leases") return { data: opts.lease ?? null, error: null };
@@ -107,14 +113,46 @@ function makeFakeClient(opts: {
 }
 
 describe("recordRentPayment", () => {
-  it("is idempotent: an existing payment reference is a no-op record", async () => {
-    const admin = makeFakeClient({ existingPayment: { id: "pay-existing" }, balance: 500 });
+  it("is idempotent: a fully-recorded payment reference is a no-op record", async () => {
+    const admin = makeFakeClient({
+      existingPayment: { id: "pay-existing" },
+      existingLedger: { id: "ledger-existing" },
+      existingCommission: { id: "commission-existing" },
+      tenant: { id: "t1", landlord_id: "ld1", building_id: "b1" },
+      building: { management_fee_pct: 10 },
+      lease: { id: "lease-1" },
+      balance: 500,
+    });
     const res = await recordRentPayment(admin, {
       tenantId: "t1", reference: "dup-ref", grossKes: 15000,
     });
+    const ins = (admin as unknown as { inserts: Record<string, unknown[]> }).inserts;
     expect(res.alreadyProcessed).toBe(true);
     expect(res.paymentId).toBe("pay-existing");
-    expect((admin as unknown as { inserts: Record<string, unknown[]> }).inserts.payments).toHaveLength(0);
+    expect(ins.payments).toHaveLength(0);
+    expect(ins.ledger_entries).toHaveLength(0);
+    expect(ins.payment_commissions).toHaveLength(0);
+  });
+
+  it("replay after partial write backfills the missing ledger credit and commission", async () => {
+    const admin = makeFakeClient({
+      existingPayment: { id: "pay-existing" },
+      existingLedger: null,
+      existingCommission: null,
+      tenant: { id: "t1", landlord_id: "ld1", building_id: "b1" },
+      building: { management_fee_pct: 10 },
+      lease: { id: "lease-1" },
+      balance: 500,
+    });
+    const res = await recordRentPayment(admin, {
+      tenantId: "t1", reference: "dup-ref-partial", grossKes: 15000,
+    });
+    const ins = (admin as unknown as { inserts: Record<string, unknown[]> }).inserts;
+    expect(res.alreadyProcessed).toBe(true);
+    expect(res.paymentId).toBe("pay-existing");
+    expect(ins.payments).toHaveLength(0);
+    expect(ins.ledger_entries).toHaveLength(1);
+    expect(ins.payment_commissions).toHaveLength(1);
   });
 
   it("records payment, credit and commission on first sight", async () => {

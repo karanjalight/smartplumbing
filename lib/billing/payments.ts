@@ -120,7 +120,9 @@ export type RecordRentPaymentResult = {
 /**
  * Idempotently record a verified rent payment: payments row + credit ledger
  * entry (landlord allocation) + commission split. Keyed on the gateway
- * `reference`; a replay returns the existing payment without re-writing.
+ * `reference`. A replay backfills any dependent row (ledger credit,
+ * commission split) that a prior attempt failed to write, so a partially
+ * recorded payment is self-healed rather than silently short-circuited.
  */
 export async function recordRentPayment(
   admin: Admin,
@@ -132,39 +134,55 @@ export async function recordRentPayment(
     rawPayload: params.rawPayload ?? null,
   };
 
-  const { data: existing } = await admin
-    .from("payments").select("id").eq("reference", params.reference).maybeSingle();
-  if (existing) {
-    const balance = await refreshTenantBalance(admin, params.tenantId);
-    return { paymentId: existing.id, alreadyProcessed: true, balance, split: null };
-  }
-
   const ctx = await resolveRentPaymentContext(admin, params.tenantId);
 
-  const { data: payment, error: payErr } = await admin
-    .from("payments").insert(buildRentPaymentInsert(ctx, rentParams))
-    .select("id").single();
-  if (payErr || !payment) {
-    throw new Error(payErr?.message ?? "Could not record payment.");
+  // 1. Payment row (idempotency anchor), keyed on reference.
+  const { data: existing } = await admin
+    .from("payments").select("id").eq("reference", params.reference).maybeSingle();
+  let paymentId: string;
+  let alreadyProcessed: boolean;
+  if (existing) {
+    paymentId = existing.id;
+    alreadyProcessed = true;
+  } else {
+    const { data: payment, error: payErr } = await admin
+      .from("payments").insert(buildRentPaymentInsert(ctx, rentParams))
+      .select("id").single();
+    if (payErr || !payment) {
+      throw new Error(payErr?.message ?? "Could not record payment.");
+    }
+    paymentId = payment.id;
+    alreadyProcessed = false;
   }
 
-  const { error: ledgerErr } = await admin
-    .from("ledger_entries").insert(buildRentLedgerCredit(ctx, rentParams, payment.id));
-  if (ledgerErr) {
-    throw new Error(ledgerErr.message ?? "Could not record rent ledger entry.");
+  // 2. Ledger credit — backfill if missing (self-heals a partially-written replay).
+  const { data: ledgerExisting } = await admin
+    .from("ledger_entries").select("id")
+    .eq("payment_id", paymentId).eq("category", "payment").maybeSingle();
+  if (!ledgerExisting) {
+    const { error: ledgerErr } = await admin
+      .from("ledger_entries").insert(buildRentLedgerCredit(ctx, rentParams, paymentId));
+    if (ledgerErr) {
+      throw new Error(ledgerErr.message ?? "Could not record rent ledger entry.");
+    }
   }
 
-  const commission = buildCommissionInsert(ctx, rentParams, payment.id);
-  const { error: commissionErr } = await admin
-    .from("payment_commissions").insert(commission);
-  if (commissionErr) {
-    throw new Error(commissionErr.message ?? "Could not record commission split.");
+  // 3. Commission split — backfill if missing (unique index on payment_id).
+  const commission = buildCommissionInsert(ctx, rentParams, paymentId);
+  const { data: commissionExisting } = await admin
+    .from("payment_commissions").select("id").eq("payment_id", paymentId).maybeSingle();
+  if (!commissionExisting) {
+    const { error: commissionErr } = await admin
+      .from("payment_commissions").insert(commission);
+    if (commissionErr) {
+      throw new Error(commissionErr.message ?? "Could not record commission split.");
+    }
   }
 
   const balance = await refreshTenantBalance(admin, params.tenantId);
   return {
-    paymentId: payment.id,
-    alreadyProcessed: false,
+    paymentId,
+    alreadyProcessed,
     balance,
     split: {
       commissionKes: commission.commission_kes,
