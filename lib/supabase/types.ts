@@ -605,6 +605,20 @@ export type OwnerExpenseRow = Timestamps & {
   created_by: string | null;
 };
 
+export type PaymentCommissionRow = {
+  id: string;
+  payment_id: string;
+  tenant_id: string | null;
+  landlord_id: string;
+  building_id: string | null;
+  gross_kes: number;
+  commission_pct: number;
+  commission_kes: number;
+  net_to_landlord_kes: number;
+  period: string | null;
+  created_at: string;
+};
+
 // ---------- Helper insert/update types -----------------------------------
 
 type Insertable<T> = Omit<T, "created_at" | "updated_at"> & {
@@ -742,6 +756,15 @@ export type Database = {
           amount_kes: number;
         };
         Update: Partial<OwnerExpenseRow>;
+        Relationships: EmptyRelationships;
+      };
+      payment_commissions: {
+        Row: PaymentCommissionRow;
+        Insert: Omit<PaymentCommissionRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<PaymentCommissionRow>;
         Relationships: EmptyRelationships;
       };
     };
