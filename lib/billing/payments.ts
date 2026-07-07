@@ -148,10 +148,18 @@ export async function recordRentPayment(
     throw new Error(payErr?.message ?? "Could not record payment.");
   }
 
-  await admin.from("ledger_entries").insert(buildRentLedgerCredit(ctx, rentParams, payment.id));
+  const { error: ledgerErr } = await admin
+    .from("ledger_entries").insert(buildRentLedgerCredit(ctx, rentParams, payment.id));
+  if (ledgerErr) {
+    throw new Error(ledgerErr.message ?? "Could not record rent ledger entry.");
+  }
 
   const commission = buildCommissionInsert(ctx, rentParams, payment.id);
-  await admin.from("payment_commissions").insert(commission);
+  const { error: commissionErr } = await admin
+    .from("payment_commissions").insert(commission);
+  if (commissionErr) {
+    throw new Error(commissionErr.message ?? "Could not record commission split.");
+  }
 
   const balance = await refreshTenantBalance(admin, params.tenantId);
   return {

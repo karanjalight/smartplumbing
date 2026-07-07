@@ -59,6 +59,7 @@ function makeFakeClient(opts: {
   building?: { management_fee_pct: number | null };
   lease?: { id: string } | null;
   balance?: number;
+  insertErrors?: Record<string, { message: string }>;
 }) {
   const inserts: Record<string, unknown[]> = {
     payments: [], ledger_entries: [], payment_commissions: [],
@@ -85,8 +86,16 @@ function makeFakeClient(opts: {
         },
         insert(rows: unknown) {
           inserts[table].push(rows);
+          const insertError = opts.insertErrors?.[table] ?? null;
+          // Both awaitable (bare `admin.from(t).insert(...)` -> { error })
+          // and chainable (`.insert(...).select().single()` for payments).
           return {
-            select() { return { single: () => ({ data: { id: "pay-new" }, error: null }) }; },
+            then(resolve: (v: { data: null; error: { message: string } | null }) => unknown) {
+              return Promise.resolve({ data: null, error: insertError }).then(resolve);
+            },
+            select() {
+              return { single: () => ({ data: { id: "pay-new" }, error: insertError }) };
+            },
           };
         },
         update() { return { eq: () => ({ data: null, error: null }) }; },
@@ -126,5 +135,18 @@ describe("recordRentPayment", () => {
     expect(ins.ledger_entries).toHaveLength(1);
     expect(ins.payment_commissions).toHaveLength(1);
     expect(res.split).toEqual({ commissionKes: 1500, netToLandlordKes: 13500 });
+  });
+
+  it("throws when the ledger credit insert fails (money not silently lost)", async () => {
+    const admin = makeFakeClient({
+      existingPayment: null,
+      tenant: { id: "t1", landlord_id: "ld1", building_id: "b1" },
+      building: { management_fee_pct: 10 },
+      lease: { id: "lease-1" },
+      insertErrors: { ledger_entries: { message: "ledger boom" } },
+    });
+    await expect(
+      recordRentPayment(admin, { tenantId: "t1", reference: "r", grossKes: 15000 })
+    ).rejects.toThrow(/ledger boom|ledger/i);
   });
 });
