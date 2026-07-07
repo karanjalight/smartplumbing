@@ -82,3 +82,24 @@ export async function listSignatures(
   if (error) throw error;
   return data ?? [];
 }
+
+/** Pure: decides whether the dashboard should prompt the tenant to sign. */
+export function deriveLeaseSignPrompt(
+  lease: LeaseRow | null,
+  signatures: LeaseSignatureRow[]
+): { lease: LeaseRow; tenantSigned: boolean } | null {
+  if (!lease || lease.status !== "pending_signature") return null;
+  const tenantSigned = signatures.some((s) => s.signer_role === "tenant");
+  return { lease, tenantSigned };
+}
+
+/** Resolves the current tenant's pending-signature lease, if any. */
+export async function getLeaseSignPromptForTenant(
+  client: Client,
+  tenantId: string
+): Promise<{ lease: LeaseRow; tenantSigned: boolean } | null> {
+  const lease = await getActiveLeaseForTenant(client, tenantId);
+  if (!lease || lease.status !== "pending_signature") return null;
+  const signatures = await listSignatures(client, lease.id);
+  return deriveLeaseSignPrompt(lease, signatures);
+}
