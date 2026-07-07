@@ -11,6 +11,7 @@ import {
   Radar,
   Search,
   TriangleAlert,
+  Upload,
   UserRound,
   Wifi,
   WifiOff,
@@ -267,16 +268,28 @@ export function MetersView() {
             </p>
           ) : null}
         </div>
-        <Link
-          href="/dashboard/meters/onboard"
-          className={cn(
-            buttonVariants({ variant: "default" }),
-            "h-10 shrink-0 rounded-full bg-[#0A4266] px-4 text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
-          )}
-        >
-          <Plus className="size-4" />
-          Onboard Meter
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/dashboard/meters/import"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "h-10 rounded-full px-4"
+            )}
+          >
+            <Upload className="size-4" />
+            Import meters
+          </Link>
+          <Link
+            href="/dashboard/meters/onboard"
+            className={cn(
+              buttonVariants({ variant: "default" }),
+              "h-10 shrink-0 rounded-full bg-[#0A4266] px-4 text-white hover:bg-[#083d5c] dark:bg-[#6BB4E8] dark:text-foreground dark:hover:bg-[#5aa3d7]"
+            )}
+          >
+            <Plus className="size-4" />
+            Onboard Meter
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

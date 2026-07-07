@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ListFilter,
   Search,
+  Upload,
   UserRound,
   Wifi,
   WifiOff,
@@ -242,15 +243,27 @@ export function LandlordMetersView({
               : ""}
           </p>
         </div>
-        <Link
-          href="/landlords/dashboard/meters/onboard"
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "h-10 shrink-0 rounded-full border-[#0A4266]/40 px-4 dark:border-[#6BB4E8]/50"
-          )}
-        >
-          Onboard meter
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/landlords/dashboard/meters/import"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "h-10 rounded-full px-4"
+            )}
+          >
+            <Upload className="size-4" />
+            Import meters
+          </Link>
+          <Link
+            href="/landlords/dashboard/meters/onboard"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "h-10 shrink-0 rounded-full border-[#0A4266]/40 px-4 dark:border-[#6BB4E8]/50"
+            )}
+          >
+            Onboard meter
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
