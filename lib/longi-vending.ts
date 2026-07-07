@@ -55,14 +55,33 @@ function parseLongiBody(
   }
 }
 
-async function fetchLongiText(url: string, method: "GET" | "POST"): Promise<{ status: number; text: string }> {
-  const res = await fetch(url, {
-    method,
-    cache: "no-store",
-    headers: JSON_HEADERS,
-  });
-  const text = await res.text();
-  return { status: res.status, text };
+function longiTimeoutMs(): number {
+  const raw = Number(process.env.LONGI_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 15000;
+}
+
+async function fetchLongiText(
+  url: string,
+  method: "GET" | "POST",
+): Promise<{ status: number; text: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), longiTimeoutMs());
+  try {
+    const res = await fetch(url, {
+      method,
+      cache: "no-store",
+      headers: JSON_HEADERS,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    return { status: res.status, text };
+  } catch {
+    // Timeout or network error → surface as an empty body so parseLongiBody
+    // returns a clean error instead of throwing up through the caller.
+    return { status: 0, text: "" };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sessionIdFromLogin(data: ServiceBaseVo & Record<string, unknown>): string | null {
@@ -227,9 +246,10 @@ export type LongiValidateMeterResult =
     }
   | LongiVendError;
 
-/** Login + GET /validation — used when onboarding a meter. */
-export async function longiValidateMeter(
+/** Validation + result mapping using an EXISTING session (no login). */
+export async function longiValidateMeterWithSession(
   config: LongiConfig,
+  sessionId: string,
   meterNo: string,
 ): Promise<LongiValidateMeterResult> {
   const trimmed = meterNo.trim();
@@ -237,16 +257,7 @@ export async function longiValidateMeter(
     return { ok: false, error: "Meter number is required", errorCode: 9002 };
   }
 
-  const login = await longiLogin(config);
-  if (login.errorCode !== 0 || !login.sessionId) {
-    return {
-      ok: false,
-      error: login.errorMsg || `LONGi login failed (${login.errorCode})`,
-      errorCode: login.errorCode,
-    };
-  }
-
-  const validation = await longiValidation(config, login.sessionId, trimmed);
+  const validation = await longiValidation(config, sessionId, trimmed);
   if (validation.errorCode !== 0) {
     const msg =
       validation.errorMsg ||
@@ -268,6 +279,28 @@ export async function longiValidateMeter(
     customerAddress: validation.customerAddress,
     latestVendingDate: validation.latestVendingDate,
   };
+}
+
+/** Login + GET /validation — used when onboarding a single meter. */
+export async function longiValidateMeter(
+  config: LongiConfig,
+  meterNo: string,
+): Promise<LongiValidateMeterResult> {
+  const trimmed = meterNo.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Meter number is required", errorCode: 9002 };
+  }
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0 || !login.sessionId) {
+    return {
+      ok: false,
+      error: login.errorMsg || `LONGi login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  return longiValidateMeterWithSession(config, login.sessionId, trimmed);
 }
 
 export function mapLongiMeterTypeToModel(

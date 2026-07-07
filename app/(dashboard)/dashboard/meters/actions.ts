@@ -7,7 +7,9 @@ import { buildMeterImpact } from "@/lib/delete/impact";
 import type { DeletePreviewResult } from "@/lib/delete/types";
 import {
   getLongiConfigFromEnv,
+  longiLogin,
   longiValidateMeter,
+  longiValidateMeterWithSession,
   mapLongiMeterTypeToModel,
   type LongiConfig,
 } from "@/lib/longi-vending";
@@ -146,6 +148,7 @@ type InsertValidatedMeterArgs = {
   latestReadingM3: number | null;
   notes: string | null;
   longiConfig: LongiConfig | null;
+  longiSession?: string;
 };
 
 type InsertValidatedMeterResult =
@@ -162,7 +165,13 @@ async function insertValidatedMeter(
   let longiMeterTypeLabel: string | undefined;
 
   if (args.longiConfig) {
-    const validation = await longiValidateMeter(args.longiConfig, meterNoTrimmed);
+    const validation = args.longiSession
+      ? await longiValidateMeterWithSession(
+          args.longiConfig,
+          args.longiSession,
+          meterNoTrimmed,
+        )
+      : await longiValidateMeter(args.longiConfig, meterNoTrimmed);
     if (!validation.ok) {
       return { ok: false, error: validation.error, code: "longi" };
     }
@@ -392,6 +401,19 @@ export async function bulkImportMeters(
   }
 
   const longiConfig = getLongiConfigFromEnv();
+  let longiSession: string | undefined;
+  if (longiConfig) {
+    const login = await longiLogin(longiConfig);
+    if (login.errorCode !== 0 || !login.sessionId) {
+      return {
+        ok: false,
+        error: login.errorMsg
+          ? `LONGi login failed: ${login.errorMsg}`
+          : `LONGi login failed (${login.errorCode}).`,
+      };
+    }
+    longiSession = login.sessionId;
+  }
   const supplier = d.supplier.trim();
   const results: BulkImportRowResult[] = [];
   const seen = new Set<string>();
@@ -418,6 +440,7 @@ export async function bulkImportMeters(
       latestReadingM3: null,
       notes: null,
       longiConfig,
+      longiSession,
     });
 
     if (r.ok) {
