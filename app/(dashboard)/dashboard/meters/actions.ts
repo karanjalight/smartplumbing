@@ -9,7 +9,9 @@ import {
   getLongiConfigFromEnv,
   longiValidateMeter,
   mapLongiMeterTypeToModel,
+  type LongiConfig,
 } from "@/lib/longi-vending";
+import { MAX_IMPORT_ROWS, METER_NO_RE } from "@/lib/meters-bulk-import";
 import { assertAdmin } from "@/lib/supabase/authz";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { MeterConnectivity, MeterModelType } from "@/lib/supabase/types";
@@ -32,12 +34,35 @@ const createMeterInput = z.object({
   notes: z.string().optional(),
 });
 
+const bulkImportInput = z.object({
+  meterNos: z.array(z.string()).min(1).max(MAX_IMPORT_ROWS),
+  supplier: z.string().min(1, "Supplier name is required."),
+  modelType: z.enum(["water_prepay_m3", "water_prepay_currency", "postpay"]),
+  connectivityStatus: z.enum(["online", "offline", "intermittent"]),
+  installedOn: z.string().optional(),
+});
+
 export type CreateMeterResult =
   | {
       ok: true;
       meterId: string;
       longiCustomerName?: string;
       longiMeterTypeLabel?: string;
+    }
+  | { ok: false; error: string };
+
+export type BulkImportRowResult = {
+  meterNo: string;
+  status: "imported" | "duplicate" | "failed";
+  reason?: string;
+  longiCustomerName?: string;
+};
+
+export type BulkImportMetersResult =
+  | {
+      ok: true;
+      results: BulkImportRowResult[];
+      summary: { imported: number; duplicates: number; failed: number };
     }
   | { ok: false; error: string };
 
@@ -111,6 +136,88 @@ function buildNotes(
   return out.length > 0 ? out : null;
 }
 
+type InsertValidatedMeterArgs = {
+  meterNo: string;
+  supplier: string;
+  modelType: MeterModelType;
+  connectivityStatus: MeterConnectivity;
+  landlordId: string | null;
+  installedOn: string | null;
+  latestReadingM3: number | null;
+  notes: string | null;
+  longiConfig: LongiConfig | null;
+};
+
+type InsertValidatedMeterResult =
+  | { ok: true; id: string; longiCustomerName?: string; longiMeterTypeLabel?: string }
+  | { ok: false; error: string; code?: "duplicate" | "longi" | "db" };
+
+async function insertValidatedMeter(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  args: InsertValidatedMeterArgs,
+): Promise<InsertValidatedMeterResult> {
+  const meterNoTrimmed = args.meterNo.trim();
+  let modelType = args.modelType;
+  let longiCustomerName: string | undefined;
+  let longiMeterTypeLabel: string | undefined;
+
+  if (args.longiConfig) {
+    const validation = await longiValidateMeter(args.longiConfig, meterNoTrimmed);
+    if (!validation.ok) {
+      return { ok: false, error: validation.error, code: "longi" };
+    }
+    longiCustomerName = validation.customerName;
+    longiMeterTypeLabel = validation.meterTypeLabel;
+    modelType = mapLongiMeterTypeToModel(validation.meterType);
+  }
+
+  const longiNote =
+    longiCustomerName || longiMeterTypeLabel
+      ? `LONGi validation: ${longiCustomerName ?? "—"} (${longiMeterTypeLabel ?? "Unknown"})`
+      : null;
+  const notes =
+    [args.notes, longiNote].filter(Boolean).join("\n\n").trim() || null;
+
+  const insertRow = {
+    meter_no: meterNoTrimmed,
+    serial_number: null,
+    supplier: args.supplier.trim(),
+    model_type: modelType,
+    lifecycle_status: "active" as const,
+    connectivity_status: args.connectivityStatus,
+    landlord_id: args.landlordId,
+    building_id: null as string | null,
+    unit_id: null as string | null,
+    installed_on: args.installedOn,
+    latest_reading_m3: args.latestReadingM3,
+    notes,
+  };
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("meters")
+    .insert(insertRow as never)
+    .select("id")
+    .maybeSingle();
+
+  if (insErr) {
+    const code = (insErr as { code?: string }).code;
+    const msg = insErr.message ?? "";
+    if (code === "23505" || /duplicate key/i.test(msg)) {
+      return {
+        ok: false,
+        error: "A meter with this meter ID already exists.",
+        code: "duplicate",
+      };
+    }
+    return { ok: false, error: msg || "Could not save the meter.", code: "db" };
+  }
+  if (!inserted?.id) {
+    return { ok: false, error: "Meter was not created (no row returned).", code: "db" };
+  }
+
+  return { ok: true, id: inserted.id, longiCustomerName, longiMeterTypeLabel };
+}
+
 export async function createMeter(input: unknown): Promise<CreateMeterResult> {
   const parsed = createMeterInput.safeParse(input);
   if (!parsed.success) {
@@ -166,21 +273,6 @@ export async function createMeter(input: unknown): Promise<CreateMeterResult> {
   const supplier = d.supplier.trim();
   const meterNoTrimmed = d.meterNo.trim();
 
-  const longiConfig = getLongiConfigFromEnv();
-  let longiCustomerName: string | undefined;
-  let longiMeterTypeLabel: string | undefined;
-  let modelType = d.modelType as MeterModelType;
-
-  if (longiConfig) {
-    const validation = await longiValidateMeter(longiConfig, meterNoTrimmed);
-    if (!validation.ok) {
-      return { ok: false, error: validation.error };
-    }
-    longiCustomerName = validation.customerName;
-    longiMeterTypeLabel = validation.meterTypeLabel;
-    modelType = mapLongiMeterTypeToModel(validation.meterType);
-  }
-
   let installedOn: string | null = null;
   if (d.installedOn?.trim()) {
     const iso = d.installedOn.trim();
@@ -200,56 +292,34 @@ export async function createMeter(input: unknown): Promise<CreateMeterResult> {
     latestReadingM3 = n;
   }
 
-  const longiNote =
-    longiCustomerName || longiMeterTypeLabel
-      ? `LONGi validation: ${longiCustomerName ?? "—"} (${longiMeterTypeLabel ?? "Unknown"})`
-      : null;
+  const longiConfig = getLongiConfigFromEnv();
+  const notes = buildNotes(d.notes, {
+    installer: d.installer,
+    firmware: d.firmware,
+    simIccid: d.simIccid,
+  });
 
-  const notes = buildNotes(
-    [d.notes, longiNote].filter(Boolean).join("\n\n") || undefined,
-    {
-      installer: d.installer,
-      firmware: d.firmware,
-      simIccid: d.simIccid,
-    },
-  );
-
-  const insertRow = {
-    meter_no: meterNoTrimmed,
-    serial_number: null,
+  const result = await insertValidatedMeter(supabase, {
+    meterNo: meterNoTrimmed,
     supplier,
-    model_type: modelType,
-    lifecycle_status: "active" as const,
-    connectivity_status: d.connectivityStatus as MeterConnectivity,
-    landlord_id: landlordId,
-    building_id: null as string | null,
-    unit_id: null as string | null,
-    installed_on: installedOn,
-    latest_reading_m3: latestReadingM3,
+    modelType: d.modelType as MeterModelType,
+    connectivityStatus: d.connectivityStatus as MeterConnectivity,
+    landlordId,
+    installedOn,
+    latestReadingM3,
     notes,
-  };
+    longiConfig,
+  });
 
-  const { data: inserted, error: insErr } = await supabase
-    .from("meters")
-    .insert(insertRow as never)
-    .select("id")
-    .maybeSingle();
-
-  if (insErr) {
-    const code = (insErr as { code?: string }).code;
-    const msg = insErr.message ?? "";
-    if (code === "23505" || /duplicate key/i.test(msg)) {
+  if (!result.ok) {
+    if (result.code === "duplicate") {
       return {
         ok: false,
         error:
           "A meter with this meter ID already exists. Use a different meter ID.",
       };
     }
-    return { ok: false, error: msg || "Could not save the meter." };
-  }
-
-  if (!inserted?.id) {
-    return { ok: false, error: "Meter was not created (no row returned)." };
+    return { ok: false, error: result.error };
   }
 
   revalidatePath("/dashboard/meters");
@@ -258,10 +328,116 @@ export async function createMeter(input: unknown): Promise<CreateMeterResult> {
 
   return {
     ok: true,
-    meterId: inserted.id,
-    longiCustomerName,
-    longiMeterTypeLabel,
+    meterId: result.id,
+    longiCustomerName: result.longiCustomerName,
+    longiMeterTypeLabel: result.longiMeterTypeLabel,
   };
+}
+
+export async function bulkImportMeters(
+  input: unknown,
+): Promise<BulkImportMetersResult> {
+  const parsed = bulkImportInput.safeParse(input);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return { ok: false, error: msg };
+  }
+  const d = parsed.data;
+
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabase.auth.getUser();
+  if (authErr || !user) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileErr || !profile) {
+    return { ok: false, error: "Could not load your profile." };
+  }
+
+  let landlordId: string | null = null;
+  if (profile.role === "admin") {
+    landlordId = null;
+  } else if (profile.role === "landlord") {
+    const { data: landlordRow, error: lhErr } = await supabase
+      .from("landlords")
+      .select("id")
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    if (lhErr || !landlordRow) {
+      return { ok: false, error: "No landlord account is linked to your profile." };
+    }
+    landlordId = landlordRow.id;
+  } else {
+    return {
+      ok: false,
+      error: "Only administrators and landlords can register meters.",
+    };
+  }
+
+  let installedOn: string | null = null;
+  if (d.installedOn?.trim()) {
+    const iso = d.installedOn.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      return { ok: false, error: "Installation date must be YYYY-MM-DD." };
+    }
+    installedOn = iso;
+  }
+
+  const longiConfig = getLongiConfigFromEnv();
+  const supplier = d.supplier.trim();
+  const results: BulkImportRowResult[] = [];
+  const seen = new Set<string>();
+
+  for (const rawMeterNo of d.meterNos) {
+    const meterNo = rawMeterNo.trim();
+    if (!METER_NO_RE.test(meterNo)) {
+      results.push({ meterNo, status: "failed", reason: "Invalid meter number." });
+      continue;
+    }
+    if (seen.has(meterNo)) {
+      results.push({ meterNo, status: "duplicate", reason: "Repeated in this batch." });
+      continue;
+    }
+    seen.add(meterNo);
+
+    const r = await insertValidatedMeter(supabase, {
+      meterNo,
+      supplier,
+      modelType: d.modelType as MeterModelType,
+      connectivityStatus: d.connectivityStatus as MeterConnectivity,
+      landlordId,
+      installedOn,
+      latestReadingM3: null,
+      notes: null,
+      longiConfig,
+    });
+
+    if (r.ok) {
+      results.push({ meterNo, status: "imported", longiCustomerName: r.longiCustomerName });
+    } else if (r.code === "duplicate") {
+      results.push({ meterNo, status: "duplicate", reason: "Already registered." });
+    } else {
+      results.push({ meterNo, status: "failed", reason: r.error });
+    }
+  }
+
+  revalidatePath("/dashboard/meters");
+  revalidatePath("/landlords/dashboard/meters");
+
+  const summary = {
+    imported: results.filter((x) => x.status === "imported").length,
+    duplicates: results.filter((x) => x.status === "duplicate").length,
+    failed: results.filter((x) => x.status === "failed").length,
+  };
+  return { ok: true, results, summary };
 }
 
 export async function previewDeleteMeter(meterNo: string): Promise<DeletePreviewResult> {
