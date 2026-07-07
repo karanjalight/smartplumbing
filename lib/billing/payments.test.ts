@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildRentPaymentInsert, buildRentLedgerCredit, buildCommissionInsert,
+  recordRentPayment,
   type RentPaymentContext, type RentPaymentParams,
 } from "@/lib/billing/payments";
 
@@ -48,5 +49,82 @@ describe("buildCommissionInsert", () => {
       payment_id: "pay-1", tenant_id: "t1", landlord_id: "ld1", building_id: "b1",
       gross_kes: 15000, commission_pct: 10, commission_kes: 1500, net_to_landlord_kes: 13500,
     });
+  });
+});
+
+/** Minimal in-memory fake of the Supabase methods recordRentPayment uses. */
+function makeFakeClient(opts: {
+  existingPayment?: { id: string } | null;
+  tenant?: { id: string; landlord_id: string | null; building_id: string | null };
+  building?: { management_fee_pct: number | null };
+  lease?: { id: string } | null;
+  balance?: number;
+}) {
+  const inserts: Record<string, unknown[]> = {
+    payments: [], ledger_entries: [], payment_commissions: [],
+  };
+  const client = {
+    inserts,
+    from(table: string) {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        in() { return this; },
+        order() { return this; },
+        limit() { return this; },
+        maybeSingle() {
+          if (table === "payments") return { data: opts.existingPayment ?? null, error: null };
+          if (table === "tenants") return { data: opts.tenant ?? null, error: null };
+          if (table === "buildings") return { data: opts.building ?? null, error: null };
+          if (table === "leases") return { data: opts.lease ?? null, error: null };
+          return { data: null, error: null };
+        },
+        single() {
+          // payments insert().select().single()
+          return { data: { id: "pay-new" }, error: null };
+        },
+        insert(rows: unknown) {
+          inserts[table].push(rows);
+          return {
+            select() { return { single: () => ({ data: { id: "pay-new" }, error: null }) }; },
+          };
+        },
+        update() { return { eq: () => ({ data: null, error: null }) }; },
+      };
+    },
+    rpc() { return { data: opts.balance ?? 0, error: null }; },
+  };
+  return client as never;
+}
+
+describe("recordRentPayment", () => {
+  it("is idempotent: an existing payment reference is a no-op record", async () => {
+    const admin = makeFakeClient({ existingPayment: { id: "pay-existing" }, balance: 500 });
+    const res = await recordRentPayment(admin, {
+      tenantId: "t1", reference: "dup-ref", grossKes: 15000,
+    });
+    expect(res.alreadyProcessed).toBe(true);
+    expect(res.paymentId).toBe("pay-existing");
+    expect((admin as unknown as { inserts: Record<string, unknown[]> }).inserts.payments).toHaveLength(0);
+  });
+
+  it("records payment, credit and commission on first sight", async () => {
+    const admin = makeFakeClient({
+      existingPayment: null,
+      tenant: { id: "t1", landlord_id: "ld1", building_id: "b1" },
+      building: { management_fee_pct: 10 },
+      lease: { id: "lease-1" },
+      balance: 0,
+    });
+    const res = await recordRentPayment(admin, {
+      tenantId: "t1", reference: "new-ref", grossKes: 15000,
+    });
+    const ins = (admin as unknown as { inserts: Record<string, unknown[]> }).inserts;
+    expect(res.alreadyProcessed).toBe(false);
+    expect(res.paymentId).toBe("pay-new");
+    expect(ins.payments).toHaveLength(1);
+    expect(ins.ledger_entries).toHaveLength(1);
+    expect(ins.payment_commissions).toHaveLength(1);
+    expect(res.split).toEqual({ commissionKes: 1500, netToLandlordKes: 13500 });
   });
 });
