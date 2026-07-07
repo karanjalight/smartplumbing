@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
 import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import { formatKes } from "@/lib/tenants-data";
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 5000, 10000];
 const KES_PER_TOKEN = 150;
@@ -30,6 +31,11 @@ type PurchaseOk = {
   kctToken1?: string;
   kctToken2?: string;
   subsidyToken?: string | null;
+};
+
+type RentResult = {
+  balance: number;
+  balanceLabel: string;
 };
 
 declare global {
@@ -98,15 +104,22 @@ export function ClientPaymentsView({
 }) {
   const [paymentType, setPaymentType] = useState<"water" | "rent">("water");
   const [amountInput, setAmountInput] = useState<string>("1000");
+  const [rentAmountInput, setRentAmountInput] = useState<string>(() =>
+    String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes)
+  );
   const [purchaseResult, setPurchaseResult] = useState<PurchaseOk | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  const [payingRent, setPayingRent] = useState(false);
+  const [rentResult, setRentResult] = useState<RentResult | null>(null);
   const payerEmail = profile.email.includes("@") ? profile.email : "client@smartone.app";
   const meterNo = profile.meterNo.trim();
 
   const derived = useMemo(() => {
     if (paymentType === "rent") {
+      const parsedAmount = Number(rentAmountInput);
+      const amountKes = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
       return {
-        amountKes: profile.rentKes,
+        amountKes,
         tokens: 0,
         litres: 0,
       };
@@ -120,7 +133,7 @@ export function ClientPaymentsView({
       tokens,
       litres: tokens * LITRES_PER_TOKEN,
     };
-  }, [paymentType, amountInput, profile.rentKes]);
+  }, [paymentType, amountInput, rentAmountInput]);
 
   async function verifyAndVend(reference: string, meter: string, amountKes: number) {
     try {
@@ -241,6 +254,107 @@ export function ClientPaymentsView({
     }
   }
 
+  async function verifyRent(reference: string) {
+    try {
+      const verifyRes = await fetch("/api/paystack/verify-rent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reference,
+          tenantId: profile.tenantId,
+        }),
+      });
+      const data = (await verifyRes.json()) as {
+        ok?: boolean;
+        error?: string;
+        balance?: number;
+      };
+      if (!verifyRes.ok || !data.ok) {
+        toast.error(data.error || `Payment verification failed (${verifyRes.status})`);
+        return;
+      }
+      const balance = typeof data.balance === "number" ? data.balance : 0;
+      setRentResult({ balance, balanceLabel: formatKes(balance) });
+      toast.success("Rent payment confirmed.");
+    } catch {
+      toast.error("Payment succeeded, but verification failed. Contact support with your reference.");
+    } finally {
+      setPayingRent(false);
+    }
+  }
+
+  async function handlePayRent() {
+    if (!profile.tenantId) {
+      toast.error("No tenant is linked to your account. Contact your landlord.");
+      return;
+    }
+    if (derived.amountKes <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+    if (!paystackPublicKey) {
+      toast.error("Paystack public key is missing. Set NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY.");
+      return;
+    }
+    if (!payerEmail.trim() || !payerEmail.includes("@")) {
+      toast.error("Enter a valid email address for payment.");
+      return;
+    }
+
+    setPayingRent(true);
+    setRentResult(null);
+    try {
+      const reference = `smartone-rent-${Date.now()}-${(profile.tenantId ?? "").slice(-6)}`;
+      const amountKes = Number(derived.amountKes.toFixed(2));
+
+      await ensurePaystackLoaded();
+      if (!window.PaystackPop) {
+        toast.error("Paystack modal is unavailable. Disable blockers and try again.");
+        setPayingRent(false);
+        return;
+      }
+
+      const commonMetadata = {
+        custom_fields: [
+          { display_name: "Customer", variable_name: "customer_name", value: profile.name },
+          { display_name: "House", variable_name: "house", value: profile.houseLabel },
+          { display_name: "Purpose", variable_name: "purpose", value: "rent" },
+        ],
+      };
+
+      const paystackPop = window.PaystackPop;
+      if (!paystackPop?.setup) {
+        toast.error("Paystack popup setup is unavailable. Refresh and try again.");
+        setPayingRent(false);
+        return;
+      }
+      paystackPop.setup({
+        key: paystackPublicKey,
+        email: payerEmail,
+        amount: Math.round(amountKes * 100),
+        currency: "KES",
+        ref: reference,
+        metadata: commonMetadata,
+        onClose: () => {
+          toast.message("Payment window closed.");
+          setPayingRent(false);
+        },
+        callback: (response) => {
+          void verifyRent(response.reference);
+        },
+      }).openIframe();
+    } catch (error: unknown) {
+      if (error instanceof Error && /Paystack script failed to load/i.test(error.message)) {
+        toast.error("Could not load Paystack modal. Check internet/ad-blocker and try again.");
+        setPayingRent(false);
+        return;
+      }
+      toast.error(`Could not start payment: ${getErrorMessage(error)}`);
+      setPayingRent(false);
+    }
+  }
+
   async function copyText(label: string, value: string) {
     if (!value) return;
     try {
@@ -294,6 +408,8 @@ export function ClientPaymentsView({
                 onChange={() => {
                   setPaymentType("rent");
                   setPurchaseResult(null);
+                  setRentResult(null);
+                  setRentAmountInput(String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes));
                 }}
               />
               <span
@@ -351,9 +467,24 @@ export function ClientPaymentsView({
                 </div>
               </div>
             ) : (
-              <p className="mt-2 text-3xl font-semibold tracking-tight">
-                KSh {derived.amountKes.toLocaleString()}
-              </p>
+              <div className="mt-2">
+                <label className="sr-only" htmlFor="rent-amount-to-pay">
+                  Rent amount to pay in Kenya shillings
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-semibold">KSh</span>
+                  <input
+                    id="rent-amount-to-pay"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={rentAmountInput}
+                    onChange={(e) => setRentAmountInput(e.target.value)}
+                    className="w-full border-b border-white/30 bg-transparent py-1 text-3xl font-semibold tracking-tight outline-none placeholder:text-white/50"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             )}
 
             {paymentType === "water" && purchaseResult ? (
@@ -376,6 +507,11 @@ export function ClientPaymentsView({
                     {derived.litres.toLocaleString()}
                   </p>
                 </div>
+              </div>
+            ) : rentResult ? (
+              <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
+                <p className="text-white/65">New balance</p>
+                <p className="mt-1 text-base font-semibold">{rentResult.balanceLabel}</p>
               </div>
             ) : (
               <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
@@ -443,19 +579,31 @@ export function ClientPaymentsView({
                   Monthly rent: <span className="font-semibold">{profile.rentLabel}</span>
                 </p>
                 <p>
+                  Outstanding balance: <span className="font-semibold">{profile.balanceLabel}</span>
+                </p>
+                <p>
                   Property: <span className="font-semibold">{profile.propertyName}</span>
                 </p>
               </div>
+              {!profile.tenantId ? (
+                <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                  No tenant is linked to your account. Contact your landlord.
+                </p>
+              ) : null}
             </div>
           )}
 
           <button
             type="button"
-            onClick={paymentType === "water" ? handlePurchaseTokens : () => toast.message("Rent checkout will use your tenant profile rent.")}
-            disabled={paymentType === "water" ? purchasing || !meterNo : false}
+            onClick={paymentType === "water" ? handlePurchaseTokens : handlePayRent}
+            disabled={
+              paymentType === "water"
+                ? purchasing || !meterNo
+                : payingRent || !profile.tenantId || derived.amountKes <= 0
+            }
             className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0A4266] text-sm font-semibold text-white shadow-lg shadow-[#0A4266]/30 transition hover:bg-[#083d5c] disabled:opacity-50"
           >
-            {paymentType === "water" && purchasing ? (
+            {(paymentType === "water" && purchasing) || (paymentType === "rent" && payingRent) ? (
               <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
             ) : (
               <Wallet className="mr-2 size-4" aria-hidden />
