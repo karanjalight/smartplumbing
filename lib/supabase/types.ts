@@ -671,7 +671,15 @@ export type Database = {
       water_pricing:      TableDef<WaterPricingRow>;
       meters:             TableDef<MeterRow>;
       tenants:            TableDef<TenantRow>;
-      payments:           TableDef<PaymentRow>;
+      payments: {
+        Row: PaymentRow;
+        Insert: Partial<PaymentRow> & {
+          amount_kes: number;
+          method: PaymentMethod;
+        };
+        Update: Partial<PaymentRow>;
+        Relationships: EmptyRelationships;
+      };
       token_purchases:    LightTableDef<TokenPurchaseRow>;
       payouts:            TableDef<PayoutRow>;
       payout_payments: {
