@@ -60,7 +60,7 @@ const menuGroups: MenuGroup[] = [
   },
   {
     id: "people",
-    title: "Properties & Management",
+    title: "Properties",
     icon: Building2,
     items: [
       { href: "/dashboard/landlords", label: "Landlords", icon: Briefcase },
