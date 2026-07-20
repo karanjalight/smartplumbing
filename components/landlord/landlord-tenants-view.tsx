@@ -137,6 +137,7 @@ function TenantEditorModal({
       name: row.name.trim(),
       phone: row.phone.trim(),
       meterId: row.meterId.trim() || "—",
+      electricityMeterId: row.electricityMeterId?.trim() || "—",
       property: row.property.trim(),
       unit: row.unit.trim() || "—",
       buildingId: row.buildingId ?? null,
@@ -155,6 +156,8 @@ function TenantEditorModal({
         buildingId: payload.buildingId ?? undefined,
         unitId: payload.houseUnitId ?? undefined,
         meterNo: payload.meterId !== "—" ? payload.meterId : undefined,
+        electricityMeterNo:
+          payload.electricityMeterId !== "—" ? payload.electricityMeterId : undefined,
         lastTokenAt: payload.lastTokenDate,
         lastTokenPreview: payload.lastTokenPreview,
       });
@@ -222,6 +225,18 @@ function TenantEditorModal({
               onChange={(e) => setRow((r) => ({ ...r, meterId: e.target.value }))}
               className="rounded-full font-mono text-sm"
               placeholder="Numeric meter serial (prefilled from unit when set)"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="t-electricity-meter">Electricity meter no. (optional)</Label>
+            <Input
+              id="t-electricity-meter"
+              value={row.electricityMeterId ?? ""}
+              onChange={(e) =>
+                setRow((r) => ({ ...r, electricityMeterId: e.target.value }))
+              }
+              className="rounded-full font-mono text-sm"
+              placeholder="Electricity meter serial (independent of the water meter above)"
             />
           </div>
           <div className="space-y-2">
