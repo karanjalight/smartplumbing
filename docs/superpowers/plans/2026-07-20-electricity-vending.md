@@ -1106,7 +1106,7 @@ export async function validateMeterWithLongi(
   }
 ```
 
-Update the import line near the top of the file (currently `getLongiConfigFromEnv,`) to also import `getLongiConfigForUtility` and the `LongiUtility` type:
+Update the import line near the top of the file (currently `getLongiConfigFromEnv,`) to also import `getLongiConfigForUtility` and the `LongiUtility` type, and add an import for `utilityOfModelType` from `@/lib/meters-data` (reuse the canonical helper from Task 5 — don't reimplement the `electricity_` prefix check inline):
 
 ```ts
 import {
@@ -1119,6 +1119,7 @@ import {
   type LongiConfig,
   type LongiUtility,
 } from "@/lib/longi-vending";
+import { utilityOfModelType } from "@/lib/meters-data";
 ```
 
 - [ ] **Step 3: Route `insertValidatedMeter`'s LONGi validation through the meter's own type when re-validating, otherwise trust the caller's config**
@@ -1133,8 +1134,7 @@ import {
 with:
 
 ```ts
-  const utility: LongiUtility = d.modelType.startsWith("electricity_") ? "electricity" : "water";
-  const longiConfig = getLongiConfigForUtility(utility);
+  const longiConfig = getLongiConfigForUtility(utilityOfModelType(d.modelType));
   const notes = buildNotes(d.notes, {
 ```
 
@@ -1148,12 +1148,32 @@ And in `bulkImportMeters`, replace:
 with:
 
 ```ts
-  const utility: LongiUtility = d.modelType.startsWith("electricity_") ? "electricity" : "water";
-  const longiConfig = getLongiConfigForUtility(utility);
+  const longiConfig = getLongiConfigForUtility(utilityOfModelType(d.modelType));
   let longiSession: string | undefined;
 ```
 
 - [ ] **Step 4: Update `onboard-meter-view.tsx`'s meter-type radio group and validate call**
+
+Add an import for the canonical `utilityOfModelType` helper from Task 5 (used below instead of reimplementing the `electricity_` prefix check inline). Replace:
+
+```tsx
+import { Button, buttonVariants } from "@/components/ui/button";
+import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+```
+
+with:
+
+```tsx
+import { Button, buttonVariants } from "@/components/ui/button";
+import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { utilityOfModelType } from "@/lib/meters-data";
+import { cn } from "@/lib/utils";
+```
 
 Replace:
 
@@ -1210,7 +1230,7 @@ Update `handleValidateLongi` to pass the currently-selected type's utility. Repl
 with:
 
 ```ts
-    const utility = meterType.startsWith("electricity_") ? "electricity" : "water";
+    const utility = utilityOfModelType(meterType);
     const result = await validateMeterWithLongi(meterId.trim(), utility);
 ```
 
