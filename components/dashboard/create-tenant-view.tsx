@@ -36,6 +36,7 @@ import {
   formatMeterPickerLabel,
   getAdminMetersForTenantPicker,
   isElectricityMeter,
+  isWaterMeter,
   type MeterRow,
 } from "@/lib/meters-data";
 import {
@@ -228,6 +229,11 @@ export function CreateTenantView({
     if (isLandlordPortal) return landlordLiveMeters;
     return adminMeterRows;
   }, [isLandlordPortal, adminMeterRows, landlordLiveMeters]);
+
+  const waterMeterPickerRows = useMemo(
+    (): MeterRow[] => meterPickerRows.filter(isWaterMeter),
+    [meterPickerRows]
+  );
 
   const electricityMeterPickerRows = useMemo(
     (): MeterRow[] => meterPickerRows.filter(isElectricityMeter),
@@ -1414,7 +1420,7 @@ export function CreateTenantView({
                   </Label>
                   {metersLoading ? (
                     <p className="text-sm text-muted-foreground">Loading meters…</p>
-                  ) : meterPickerRows.length === 0 ? (
+                  ) : waterMeterPickerRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       No meters in inventory.{" "}
                       <Link
@@ -1445,7 +1451,7 @@ export function CreateTenantView({
                             ? "No meter — assign later"
                             : "Use unit default / assign later (demo serial)"}
                         </option>
-                        {meterPickerRows.map((m) => (
+                        {waterMeterPickerRows.map((m) => (
                           <option key={m.meterId} value={m.meterId}>
                             {formatMeterPickerLabel(m)}
                           </option>

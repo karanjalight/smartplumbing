@@ -6,6 +6,7 @@ import {
   type LongiUtility,
   type LongiVendResult,
 } from "@/lib/longi-vending";
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 import { resolveMeterTenantContext } from "@/lib/tokens-data";
@@ -119,6 +120,25 @@ export async function POST(request: Request) {
   }
   if (!Number.isFinite(amountKes) || amountKes <= 0) {
     return NextResponse.json({ ok: false, error: "Paid amount is invalid." }, { status: 400 });
+  }
+
+  const admin = getSupabaseAdminClient();
+  const { data: meterRow } = await admin
+    .from("meters")
+    .select("model_type")
+    .eq("meter_no", meterNo)
+    .maybeSingle();
+  if (meterRow) {
+    const actualUtility = utilityOfModelType(meterRow.model_type as MeterModelType);
+    if (actualUtility !== utility) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `This meter is a ${actualUtility} meter, but the request specified ${utility}.`,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   const vend = await longiVendToken(longiConfig, { meterNo, amount: amountKes });

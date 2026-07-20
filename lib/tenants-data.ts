@@ -257,6 +257,7 @@ export type TenantDirectoryRow = DbTenantRow & {
   building_name: string | null;
   unit_label: string | null;
   meter_no: string | null;
+  electricity_meter_no: string | null;
 };
 
 function formatTenantDate(value: string | null): string | null {
@@ -277,6 +278,7 @@ export function mapTenantDirectoryToUiRow(row: TenantDirectoryRow): TenantRow {
     name: row.full_name,
     phone: row.phone?.trim() || "—",
     meterId: row.meter_no?.trim() || "—",
+    electricityMeterId: row.electricity_meter_no?.trim() || "—",
     property: row.building_name?.trim() || "—",
     unit: row.unit_label?.trim() || "—",
     landlordId: row.landlord_id,
@@ -299,6 +301,7 @@ export function mapDbTenantToUiRow(row: DbTenantRow): TenantRow {
     building_name: null,
     unit_label: null,
     meter_no: null,
+    electricity_meter_no: null,
   });
 }
 
@@ -326,6 +329,9 @@ function mapDbTenantRecordToUiRow(
     phone: row.phone?.trim() || "—",
     meterId: row.meter_id
       ? lookups.meterNos.get(row.meter_id)?.trim() || "—"
+      : "—",
+    electricityMeterId: row.electricity_meter_id
+      ? lookups.meterNos.get(row.electricity_meter_id)?.trim() || "—"
       : "—",
     property: row.building_id
       ? lookups.buildingNames.get(row.building_id)?.trim() || "—"
@@ -401,7 +407,9 @@ export async function fetchTenantRowsForLandlord(
   ];
   const meterIds = [
     ...new Set(
-      scopedTenants.map((t) => t.meter_id).filter((id): id is string => Boolean(id)),
+      scopedTenants
+        .flatMap((t) => [t.meter_id, t.electricity_meter_id])
+        .filter((id): id is string => Boolean(id)),
     ),
   ];
 
@@ -454,7 +462,9 @@ export async function fetchTenantRows(
   ];
   const meterIds = [
     ...new Set(
-      tenants.map((t) => t.meter_id).filter((id): id is string => Boolean(id)),
+      tenants
+        .flatMap((t) => [t.meter_id, t.electricity_meter_id])
+        .filter((id): id is string => Boolean(id)),
     ),
   ];
 
@@ -522,7 +532,7 @@ export async function fetchTenantDetailById(
   if (error) throw error;
   if (!row) return null;
 
-  const [buildingRes, unitRes, meterRes] = await Promise.all([
+  const [buildingRes, unitRes, meterRes, electricityMeterRes] = await Promise.all([
     row.building_id
       ? client
           .from("buildings")
@@ -535,6 +545,9 @@ export async function fetchTenantDetailById(
       : Promise.resolve({ data: null }),
     row.meter_id
       ? client.from("meters").select("meter_no").eq("id", row.meter_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    row.electricity_meter_id
+      ? client.from("meters").select("meter_no").eq("id", row.electricity_meter_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -550,9 +563,14 @@ export async function fetchTenantDetailById(
         : [],
     ),
     meterNos: new Map(
-      row.meter_id && meterRes.data?.meter_no
-        ? [[row.meter_id, meterRes.data.meter_no]]
-        : [],
+      [
+        row.meter_id && meterRes.data?.meter_no
+          ? ([row.meter_id, meterRes.data.meter_no] as [string, string])
+          : null,
+        row.electricity_meter_id && electricityMeterRes.data?.meter_no
+          ? ([row.electricity_meter_id, electricityMeterRes.data.meter_no] as [string, string])
+          : null,
+      ].filter((entry): entry is [string, string] => entry !== null),
     ),
   };
 

@@ -8,9 +8,11 @@ import { z } from "zod";
 import { buildTenantImpact } from "@/lib/delete/impact";
 import type { DeletePreviewResult } from "@/lib/delete/types";
 import { resolveLandlordId } from "@/lib/landlords-data";
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requirePublicSupabaseConfig } from "@/lib/supabase/env";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { findMeterAssignmentConflict } from "@/lib/tenant-meter-assignment";
 import { parseUiDateToIso } from "@/lib/tenants-data";
 import type {
   Database,
@@ -208,7 +210,7 @@ async function resolveMeterIdForTenant(
 
   const { data: meterRow, error: meterErr } = await admin
     .from("meters")
-    .select("id, landlord_id")
+    .select("id, landlord_id, model_type")
     .eq("meter_no", meterNoTrim)
     .maybeSingle();
 
@@ -226,6 +228,17 @@ async function resolveMeterIdForTenant(
     return { ok: false, error: "That meter belongs to a different landlord." };
   }
 
+  const expectedUtility = targetColumn === "electricity_meter_id" ? "electricity" : "water";
+  if (utilityOfModelType(meterRow.model_type as MeterModelType) !== expectedUtility) {
+    return {
+      ok: false,
+      error:
+        expectedUtility === "electricity"
+          ? "That meter is not an electricity meter."
+          : "That meter is not a water meter.",
+    };
+  }
+
   const { data: conflictingTenants, error: conflictErr } = await admin
     .from("tenants")
     .select("id, meter_id, electricity_meter_id")
@@ -235,22 +248,14 @@ async function resolveMeterIdForTenant(
     return { ok: false, error: conflictErr.message };
   }
 
-  const otherColumn: "meter_id" | "electricity_meter_id" =
-    targetColumn === "meter_id" ? "electricity_meter_id" : "meter_id";
-
-  for (const row of conflictingTenants ?? []) {
-    if (row.id !== tenantId) {
-      return { ok: false, error: "That meter is already linked to another tenant." };
-    }
-    if (row[otherColumn] === meterRow.id) {
-      return {
-        ok: false,
-        error:
-          targetColumn === "meter_id"
-            ? "That meter is already assigned as this tenant's electricity meter."
-            : "That meter is already assigned as this tenant's water meter.",
-      };
-    }
+  const conflict = findMeterAssignmentConflict(
+    conflictingTenants ?? [],
+    tenantId,
+    meterRow.id,
+    targetColumn,
+  );
+  if (conflict.conflict) {
+    return { ok: false, error: conflict.error };
   }
 
   return { ok: true, meterId: meterRow.id };
@@ -391,7 +396,7 @@ export async function createTenantAccount(
   if (meterNoTrim) {
     const { data: meterRow, error: meterErr } = await admin
       .from("meters")
-      .select("id, landlord_id")
+      .select("id, landlord_id, model_type")
       .eq("meter_no", meterNoTrim)
       .maybeSingle();
 
@@ -410,6 +415,10 @@ export async function createTenantAccount(
         ok: false,
         error: "That meter belongs to a different landlord.",
       };
+    }
+
+    if (utilityOfModelType(meterRow.model_type as MeterModelType) !== "water") {
+      return { ok: false, error: "That meter is not a water meter." };
     }
 
     const { data: conflictingTenants, error: meterTenantErr } = await admin
@@ -431,7 +440,7 @@ export async function createTenantAccount(
   if (electricityMeterNoTrim) {
     const { data: electricityMeterRow, error: electricityMeterErr } = await admin
       .from("meters")
-      .select("id, landlord_id")
+      .select("id, landlord_id, model_type")
       .eq("meter_no", electricityMeterNoTrim)
       .maybeSingle();
 
@@ -453,6 +462,10 @@ export async function createTenantAccount(
         ok: false,
         error: "That meter belongs to a different landlord.",
       };
+    }
+
+    if (utilityOfModelType(electricityMeterRow.model_type as MeterModelType) !== "electricity") {
+      return { ok: false, error: "That meter is not an electricity meter." };
     }
 
     if (meterId && electricityMeterRow.id === meterId) {
@@ -743,6 +756,13 @@ export async function updateTenantRecord(input: unknown): Promise<ActionResult> 
     return { ok: false, error: electricityMeterResolved.error };
   }
   const electricityMeterId = electricityMeterResolved.meterId;
+
+  if (meterId && electricityMeterId && meterId === electricityMeterId) {
+    return {
+      ok: false,
+      error: "The water meter and electricity meter cannot be the same physical meter.",
+    };
+  }
 
   const lastTokenIso = parseUiDateToIso(lastTokenAt);
   const tokenPreview =
