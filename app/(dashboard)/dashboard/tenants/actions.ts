@@ -226,17 +226,31 @@ async function resolveMeterIdForTenant(
     return { ok: false, error: "That meter belongs to a different landlord." };
   }
 
-  const { data: meterTenant, error: meterTenantErr } = await admin
+  const { data: conflictingTenants, error: conflictErr } = await admin
     .from("tenants")
-    .select("id")
-    .eq(targetColumn, meterRow.id)
-    .maybeSingle();
+    .select("id, meter_id, electricity_meter_id")
+    .or(`meter_id.eq.${meterRow.id},electricity_meter_id.eq.${meterRow.id}`);
 
-  if (meterTenantErr) {
-    return { ok: false, error: meterTenantErr.message };
+  if (conflictErr) {
+    return { ok: false, error: conflictErr.message };
   }
-  if (meterTenant && meterTenant.id !== tenantId) {
-    return { ok: false, error: "That meter is already linked to another tenant." };
+
+  const otherColumn: "meter_id" | "electricity_meter_id" =
+    targetColumn === "meter_id" ? "electricity_meter_id" : "meter_id";
+
+  for (const row of conflictingTenants ?? []) {
+    if (row.id !== tenantId) {
+      return { ok: false, error: "That meter is already linked to another tenant." };
+    }
+    if (row[otherColumn] === meterRow.id) {
+      return {
+        ok: false,
+        error:
+          targetColumn === "meter_id"
+            ? "That meter is already assigned as this tenant's electricity meter."
+            : "That meter is already assigned as this tenant's water meter.",
+      };
+    }
   }
 
   return { ok: true, meterId: meterRow.id };
@@ -398,16 +412,15 @@ export async function createTenantAccount(
       };
     }
 
-    const { data: meterTenant, error: meterTenantErr } = await admin
+    const { data: conflictingTenants, error: meterTenantErr } = await admin
       .from("tenants")
       .select("id")
-      .eq("meter_id", meterRow.id)
-      .maybeSingle();
+      .or(`meter_id.eq.${meterRow.id},electricity_meter_id.eq.${meterRow.id}`);
 
     if (meterTenantErr) {
       return { ok: false, error: meterTenantErr.message };
     }
-    if (meterTenant) {
+    if (conflictingTenants && conflictingTenants.length > 0) {
       return { ok: false, error: "That meter is already linked to another tenant." };
     }
 
@@ -449,16 +462,15 @@ export async function createTenantAccount(
       };
     }
 
-    const { data: electricityMeterTenant, error: electricityMeterTenantErr } = await admin
+    const { data: conflictingElectricityTenants, error: electricityMeterTenantErr } = await admin
       .from("tenants")
       .select("id")
-      .eq("electricity_meter_id", electricityMeterRow.id)
-      .maybeSingle();
+      .or(`meter_id.eq.${electricityMeterRow.id},electricity_meter_id.eq.${electricityMeterRow.id}`);
 
     if (electricityMeterTenantErr) {
       return { ok: false, error: electricityMeterTenantErr.message };
     }
-    if (electricityMeterTenant) {
+    if (conflictingElectricityTenants && conflictingElectricityTenants.length > 0) {
       return { ok: false, error: "That meter is already linked to another tenant." };
     }
 
