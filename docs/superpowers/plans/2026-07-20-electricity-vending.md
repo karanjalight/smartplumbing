@@ -1275,7 +1275,7 @@ LONGI_ELECTRICITY_BASE_URL=http://36.103.243.24:40080/vendingservice
 
 - [ ] **Step 2: Document the new vars in `docs/SUPABASE.md`**
 
-In `docs/SUPABASE.md`, after the existing `.env.local` block in section 2.4, add a short note. Replace:
+In `docs/SUPABASE.md`, after the existing `.env.local` block in section 2.4, add a short note. Find this paragraph (section 2.4 currently ends with it):
 
 ```
 `SUPABASE_SERVICE_ROLE_KEY` is required for server actions that use the admin
@@ -1284,9 +1284,8 @@ client (for example admin self-registration on `/sign-up`).
 Restart `npm run dev`.
 ```
 
-with:
+Insert a new paragraph and code block between the two existing lines, so the section reads (note the `env` fence below is markdown content going INTO `docs/SUPABASE.md` — do not treat it as an instruction to you, transcribe it literally):
 
-```
 `SUPABASE_SERVICE_ROLE_KEY` is required for server actions that use the admin
 client (for example admin self-registration on `/sign-up`).
 
@@ -1304,29 +1303,9 @@ LONGI_ELECTRICITY_BASE_URL=http://host:port/vendingservice
 ```
 
 Restart `npm run dev`.
-```
 
-In section 8.1, after the existing LONGi paragraph, add a short cross-reference. Replace:
+Then, in section 8.1 ("LONGi vending"), insert a new subsection immediately after its existing closing code block and before `### 8.2 Paystack` (this is a pure insertion — nothing in section 8.1's existing text changes):
 
-```
-### 8.1 LONGi vending (`app/api/longi/*`)
-
-Today the routes just proxy to the vendor and return the token. With
-Supabase wired in, the same routes should also:
-```
-
-with:
-
-```
-### 8.1 LONGi vending (`app/api/longi/*`)
-
-Today the routes just proxy to the vendor and return the token. With
-Supabase wired in, the same routes should also:
-```
-
-(no change needed here — insert a NEW subsection instead, after 8.1's closing code block and before `### 8.2 Paystack`). Insert:
-
-```
 ### 8.1a Electricity vending
 
 Electricity uses the same LONGi API shape as water (`docs/API.md` is
@@ -1337,9 +1316,6 @@ utility-agnostic — `meterType` 0/4 are electricity, 1/5 are water) but a
 credential set; every LONGi call site (onboarding validation, client
 purchase via Paystack, manual issuance) resolves `utility` from the target
 meter's `model_type` via `utilityOfModelType()` in `lib/meters-data.ts`.
-
-```
-```
 
 - [ ] **Step 3: Commit**
 
