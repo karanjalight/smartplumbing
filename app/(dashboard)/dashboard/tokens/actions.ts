@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
-  getLongiConfigFromEnv,
+  getLongiConfigForUtility,
   longiVendToken,
 } from "@/lib/longi-vending";
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json, ManualTokenChannel } from "@/lib/supabase/types";
 import { resolveMeterTenantContext } from "@/lib/tokens-data";
@@ -42,15 +43,6 @@ export async function issueManualToken(
   if (!parsed.success) {
     const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
     return { ok: false, error: msg };
-  }
-
-  const longiConfig = getLongiConfigFromEnv();
-  if (!longiConfig) {
-    return {
-      ok: false,
-      error:
-        "LONGi vending is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5 on the server.",
-    };
   }
 
   const supabase = await getSupabaseServerClient();
@@ -96,6 +88,27 @@ export async function issueManualToken(
   }
 
   const { meterNo, amountKes, channel, note } = parsed.data;
+
+  const { data: meterRow } = await supabase
+    .from("meters")
+    .select("model_type")
+    .eq("meter_no", meterNo)
+    .maybeSingle();
+
+  const utility = meterRow
+    ? utilityOfModelType(meterRow.model_type as MeterModelType)
+    : "water";
+  const longiConfig = getLongiConfigForUtility(utility);
+  if (!longiConfig) {
+    return {
+      ok: false,
+      error:
+        utility === "electricity"
+          ? "LONGi electricity vending is not configured. Set LONGI_ELECTRICITY_USERNAME and LONGI_ELECTRICITY_PASSWORD_MD5 on the server."
+          : "LONGi vending is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5 on the server.",
+    };
+  }
+
   const ctx = await resolveMeterTenantContext(supabase, meterNo);
 
   if (landlordScopeId) {
