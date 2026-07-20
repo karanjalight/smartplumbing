@@ -6,7 +6,6 @@ import { z } from "zod";
 import { buildMeterImpact } from "@/lib/delete/impact";
 import type { DeletePreviewResult } from "@/lib/delete/types";
 import {
-  getLongiConfigFromEnv,
   getLongiConfigForUtility,
   longiLogin,
   longiValidateMeter,
