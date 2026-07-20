@@ -14,16 +14,48 @@ export type ServiceBaseVo = {
   errorMsg?: string | null;
 };
 
-export function getLongiConfigFromEnv(): LongiConfig | null {
-  const username = process.env.LONGI_USERNAME;
-  const passwordMd5 = process.env.LONGI_PASSWORD_MD5;
+export type LongiUtility = "water" | "electricity";
+
+function readLongiConfig(
+  usernameVar: string,
+  passwordVar: string,
+  baseUrlVar: string,
+  baseUrlDefault: string,
+): LongiConfig | null {
+  const username = process.env[usernameVar];
+  const passwordMd5 = process.env[passwordVar];
   if (!username?.trim() || !passwordMd5?.trim()) return null;
-  const raw = process.env.LONGI_VENDING_BASE_URL ?? "http://longimeter.net:21207/vendingservice";
+  const raw = process.env[baseUrlVar] ?? baseUrlDefault;
   return {
     baseUrl: raw.replace(/\/$/, ""),
     username: username.trim(),
     passwordMd5: passwordMd5.trim(),
   };
+}
+
+/** Water LONGi credentials (existing env vars, unchanged). */
+export function getLongiConfigFromEnv(): LongiConfig | null {
+  return readLongiConfig(
+    "LONGI_USERNAME",
+    "LONGI_PASSWORD_MD5",
+    "LONGI_VENDING_BASE_URL",
+    "http://longimeter.net:21207/vendingservice",
+  );
+}
+
+/** Electricity LONGi credentials — separate merchant account from water. */
+export function getLongiConfigForElectricity(): LongiConfig | null {
+  return readLongiConfig(
+    "LONGI_ELECTRICITY_USERNAME",
+    "LONGI_ELECTRICITY_PASSWORD_MD5",
+    "LONGI_ELECTRICITY_BASE_URL",
+    "http://longimeter.net:21207/vendingservice",
+  );
+}
+
+/** Pick the right LONGi credential set for a given utility. */
+export function getLongiConfigForUtility(utility: LongiUtility): LongiConfig | null {
+  return utility === "electricity" ? getLongiConfigForElectricity() : getLongiConfigFromEnv();
 }
 
 const JSON_HEADERS = { Accept: "application/json" } as const;
@@ -305,9 +337,11 @@ export async function longiValidateMeter(
 
 export function mapLongiMeterTypeToModel(
   meterType: number | undefined,
-): "water_prepay_m3" | "water_prepay_currency" | "postpay" {
+): "water_prepay_m3" | "water_prepay_currency" | "postpay" | "electricity_prepay_kwh" | "electricity_prepay_currency" {
   if (meterType === -1) return "postpay";
-  if (meterType === 4 || meterType === 5) return "water_prepay_currency";
+  if (meterType === 0) return "electricity_prepay_kwh";
+  if (meterType === 4) return "electricity_prepay_currency";
+  if (meterType === 5) return "water_prepay_currency";
   return "water_prepay_m3";
 }
 
