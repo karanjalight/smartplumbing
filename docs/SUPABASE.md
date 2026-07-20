@@ -69,6 +69,19 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 `SUPABASE_SERVICE_ROLE_KEY` is required for server actions that use the admin
 client (for example admin self-registration on `/sign-up`).
 
+LONGi vending needs two separate credential sets — one per utility, since
+water and electricity are vended through different LONGi merchant accounts:
+
+```env
+LONGI_USERNAME=...
+LONGI_PASSWORD_MD5=...
+LONGI_VENDING_BASE_URL=http://host:port/vendingservice
+
+LONGI_ELECTRICITY_USERNAME=...
+LONGI_ELECTRICITY_PASSWORD_MD5=...
+LONGI_ELECTRICITY_BASE_URL=http://host:port/vendingservice
+```
+
 Restart `npm run dev`.
 
 ---
@@ -279,6 +292,17 @@ await supabase.from("token_purchases").insert({
   note: null,
 });
 ```
+
+### 8.1a Electricity vending
+
+Electricity uses the same LONGi API shape as water (`docs/API.md` is
+utility-agnostic — `meterType` 0/4 are electricity, 1/5 are water) but a
+**separate merchant account**: `LONGI_ELECTRICITY_USERNAME` /
+`LONGI_ELECTRICITY_PASSWORD_MD5` / `LONGI_ELECTRICITY_BASE_URL`.
+`lib/longi-vending.ts`'s `getLongiConfigForUtility(utility)` picks the right
+credential set; every LONGi call site (onboarding validation, client
+purchase via Paystack, manual issuance) resolves `utility` from the target
+meter's `model_type` via `utilityOfModelType()` in `lib/meters-data.ts`.
 
 ### 8.2 Paystack (`app/api/paystack/*`)
 
