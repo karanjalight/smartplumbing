@@ -89,11 +89,15 @@ export async function issueManualToken(
 
   const { meterNo, amountKes, channel, note } = parsed.data;
 
-  const { data: meterRow } = await supabase
+  const { data: meterRow, error: meterRowErr } = await supabase
     .from("meters")
     .select("model_type")
     .eq("meter_no", meterNo)
     .maybeSingle();
+
+  if (meterRowErr) {
+    return { ok: false, error: meterRowErr.message };
+  }
 
   const utility = meterRow
     ? utilityOfModelType(meterRow.model_type as MeterModelType)
