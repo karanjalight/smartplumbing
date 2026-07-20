@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, CreditCard, Headphones, MapPin, Search, Smartphone, Ticket } from "lucide-react";
+import { Check, ChevronDown, CreditCard, Droplets, Headphones, MapPin, Search, Smartphone, Ticket, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,8 +26,27 @@ const SOURCE_OPTIONS: { key: "all" | TokenPurchaseSource; label: string }[] = [
   { key: "manual", label: "Manual" },
 ];
 
+const UTILITY_OPTIONS: { key: "all" | "water" | "electricity"; label: string }[] = [
+  { key: "all", label: "All utilities" },
+  { key: "water", label: "Water" },
+  { key: "electricity", label: "Electricity" },
+];
+
 const DROPDOWN_TRIGGER =
   "flex h-10 w-full items-center justify-between gap-2 rounded-full border border-border bg-background px-3 text-left text-sm dark:border-border/80 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+function utilityBadge(utility: "water" | "electricity") {
+  const cls =
+    utility === "water"
+      ? "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+      : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200";
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium", cls)}>
+      {utility === "water" ? <Droplets className="size-3" /> : <Zap className="size-3" />}
+      {utility === "water" ? "Water" : "Electricity"}
+    </span>
+  );
+}
 
 export function PurchasedTokensView() {
   const pathname = usePathname();
@@ -61,15 +80,19 @@ export function PurchasedTokensView() {
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | TokenPurchaseSource>("all");
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
+  const [utilityFilter, setUtilityFilter] = useState<"all" | "water" | "electricity">("all");
+  const [utilityMenuOpen, setUtilityMenuOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const sourceMenuRef = useRef<HTMLDivElement>(null);
+  const utilityMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
       const target = e.target as Node;
       if (sourceMenuRef.current && !sourceMenuRef.current.contains(target)) setSourceMenuOpen(false);
+      if (utilityMenuRef.current && !utilityMenuRef.current.contains(target)) setUtilityMenuOpen(false);
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
@@ -81,13 +104,16 @@ export function PurchasedTokensView() {
     const app = rows.filter((r) => r.source === "app").length;
     const manual = rows.filter((r) => r.source === "manual").length;
     const volume = rows.reduce((s, r) => s + r.amountKes, 0);
-    return { total, mpesa, app, manual, volume };
+    const waterVolume = rows.filter((r) => r.utility === "water").reduce((s, r) => s + r.amountKes, 0);
+    const electricityVolume = rows.filter((r) => r.utility === "electricity").reduce((s, r) => s + r.amountKes, 0);
+    return { total, mpesa, app, manual, volume, waterVolume, electricityVolume };
   }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (sourceFilter !== "all" && row.source !== sourceFilter) return false;
+      if (utilityFilter !== "all" && row.utility !== utilityFilter) return false;
       if (!q) return true;
       return (
         row.meterNo.toLowerCase().includes(q) ||
@@ -98,7 +124,7 @@ export function PurchasedTokensView() {
         (row.paymentRef ?? "").toLowerCase().includes(q)
       );
     });
-  }, [rows, search, sourceFilter]);
+  }, [rows, search, sourceFilter, utilityFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -108,6 +134,7 @@ export function PurchasedTokensView() {
   const showingTo = start + pageRows.length;
 
   const sourceFilterLabel = SOURCE_OPTIONS.find((o) => o.key === sourceFilter)?.label ?? "All sources";
+  const utilityFilterLabel = UTILITY_OPTIONS.find((o) => o.key === utilityFilter)?.label ?? "All utilities";
 
   return (
     <div className="space-y-8 pb-10">
@@ -148,6 +175,16 @@ export function PurchasedTokensView() {
           <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{summary.total}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Volume {summary.volume.toLocaleString("en-KE")} KES (all rows)
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Droplets className="size-3 text-sky-600 dark:text-sky-400" />
+              {summary.waterVolume.toLocaleString("en-KE")} KES
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Zap className="size-3 text-amber-600 dark:text-amber-400" />
+              {summary.electricityVolume.toLocaleString("en-KE")} KES
+            </span>
           </p>
         </div>
         <div className="rounded-xl border border-border bg-emerald-50 p-4 shadow-sm dark:border-border/80 dark:bg-emerald-950/30">
@@ -190,46 +227,95 @@ export function PurchasedTokensView() {
               aria-label="Search token purchases"
             />
           </div>
-          <div ref={sourceMenuRef} className="relative w-full min-w-0 lg:max-w-xs">
-            <button
-              type="button"
-              onClick={() => setSourceMenuOpen((o) => !o)}
-              className={DROPDOWN_TRIGGER}
-              aria-expanded={sourceMenuOpen}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <CreditCard className="size-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">{sourceFilterLabel}</span>
-              </span>
-              <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", sourceMenuOpen && "rotate-180")} />
-            </button>
-            {sourceMenuOpen && (
-              <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-lg dark:border-border/80">
-                <ul className="max-h-56 overflow-y-auto p-1" role="listbox">
-                  {SOURCE_OPTIONS.map((o) => (
-                    <li key={o.key}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={sourceFilter === o.key}
-                        className={cn(
-                          "flex w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted",
-                          sourceFilter === o.key && "bg-muted/80"
-                        )}
-                        onClick={() => {
-                          setSourceFilter(o.key);
-                          setSourceMenuOpen(false);
-                          setPage(1);
-                        }}
-                      >
-                        {sourceFilter === o.key && <Check className="mr-2 inline size-4 text-[#0A4266] dark:text-[#6BB4E8]" />}
-                        <span className={sourceFilter !== o.key ? "pl-6" : ""}>{o.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-2">
+            <div ref={utilityMenuRef} className="relative min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setUtilityMenuOpen((o) => !o);
+                  setSourceMenuOpen(false);
+                }}
+                className={DROPDOWN_TRIGGER}
+                aria-expanded={utilityMenuOpen}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <Zap className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{utilityFilterLabel}</span>
+                </span>
+                <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", utilityMenuOpen && "rotate-180")} />
+              </button>
+              {utilityMenuOpen && (
+                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-lg dark:border-border/80">
+                  <ul className="max-h-56 overflow-y-auto p-1" role="listbox">
+                    {UTILITY_OPTIONS.map((o) => (
+                      <li key={o.key}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={utilityFilter === o.key}
+                          className={cn(
+                            "flex w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted",
+                            utilityFilter === o.key && "bg-muted/80"
+                          )}
+                          onClick={() => {
+                            setUtilityFilter(o.key);
+                            setUtilityMenuOpen(false);
+                            setPage(1);
+                          }}
+                        >
+                          {utilityFilter === o.key && <Check className="mr-2 inline size-4 text-[#0A4266] dark:text-[#6BB4E8]" />}
+                          <span className={utilityFilter !== o.key ? "pl-6" : ""}>{o.label}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div ref={sourceMenuRef} className="relative min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceMenuOpen((o) => !o);
+                  setUtilityMenuOpen(false);
+                }}
+                className={DROPDOWN_TRIGGER}
+                aria-expanded={sourceMenuOpen}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <CreditCard className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{sourceFilterLabel}</span>
+                </span>
+                <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", sourceMenuOpen && "rotate-180")} />
+              </button>
+              {sourceMenuOpen && (
+                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-lg dark:border-border/80">
+                  <ul className="max-h-56 overflow-y-auto p-1" role="listbox">
+                    {SOURCE_OPTIONS.map((o) => (
+                      <li key={o.key}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={sourceFilter === o.key}
+                          className={cn(
+                            "flex w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted",
+                            sourceFilter === o.key && "bg-muted/80"
+                          )}
+                          onClick={() => {
+                            setSourceFilter(o.key);
+                            setSourceMenuOpen(false);
+                            setPage(1);
+                          }}
+                        >
+                          {sourceFilter === o.key && <Check className="mr-2 inline size-4 text-[#0A4266] dark:text-[#6BB4E8]" />}
+                          <span className={sourceFilter !== o.key ? "pl-6" : ""}>{o.label}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -280,7 +366,10 @@ export function PurchasedTokensView() {
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-foreground">{row.orderNo}</td>
-                      <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">{row.meterNo}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs font-medium text-foreground">{row.meterNo}</div>
+                        <div className="mt-1">{utilityBadge(row.utility)}</div>
+                      </td>
                       <td className="px-4 py-3 tabular-nums text-foreground">{row.amountKes.toLocaleString("en-KE")} KES</td>
                       <td className="max-w-[200px] px-4 py-3">
                         <span className="font-mono text-xs font-medium break-all text-foreground">{row.tokenFormatted}</span>
