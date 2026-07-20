@@ -22,6 +22,7 @@ export type TenantRow = {
   name: string;
   phone: string;
   meterId: string;
+  electricityMeterId?: string | null;
   property: string;
   unit: string;
   landlordId: string;
