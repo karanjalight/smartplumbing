@@ -7,12 +7,15 @@ import { buildMeterImpact } from "@/lib/delete/impact";
 import type { DeletePreviewResult } from "@/lib/delete/types";
 import {
   getLongiConfigFromEnv,
+  getLongiConfigForUtility,
   longiLogin,
   longiValidateMeter,
   longiValidateMeterWithSession,
   mapLongiMeterTypeToModel,
   type LongiConfig,
+  type LongiUtility,
 } from "@/lib/longi-vending";
+import { utilityOfModelType } from "@/lib/meters-data";
 import { MAX_IMPORT_ROWS, METER_NO_RE } from "@/lib/meters-bulk-import";
 import { assertAdmin } from "@/lib/supabase/authz";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -26,7 +29,13 @@ const createMeterInput = z.object({
     .max(16, "Meter ID is too long.")
     .regex(/^\d+$/, "Meter ID must be numeric."),
   supplier: z.string().min(1, "Supplier name is required."),
-  modelType: z.enum(["water_prepay_m3", "water_prepay_currency", "postpay"]),
+  modelType: z.enum([
+    "water_prepay_m3",
+    "water_prepay_currency",
+    "postpay",
+    "electricity_prepay_kwh",
+    "electricity_prepay_currency",
+  ]),
   connectivityStatus: z.enum(["online", "offline", "intermittent"]),
   installedOn: z.string().optional(),
   installer: z.string().optional(),
@@ -39,7 +48,13 @@ const createMeterInput = z.object({
 const bulkImportInput = z.object({
   meterNos: z.array(z.string()).min(1).max(MAX_IMPORT_ROWS),
   supplier: z.string().min(1, "Supplier name is required."),
-  modelType: z.enum(["water_prepay_m3", "water_prepay_currency", "postpay"]),
+  modelType: z.enum([
+    "water_prepay_m3",
+    "water_prepay_currency",
+    "postpay",
+    "electricity_prepay_kwh",
+    "electricity_prepay_currency",
+  ]),
   connectivityStatus: z.enum(["online", "offline", "intermittent"]),
   installedOn: z.string().optional(),
 });
@@ -83,18 +98,21 @@ export type ValidateMeterLongiResult =
 /** Step 2 of onboarding: login + LONGi meter validation (no DB write). */
 export async function validateMeterWithLongi(
   meterNo: string,
+  utility: LongiUtility = "water",
 ): Promise<ValidateMeterLongiResult> {
   const trimmed = meterNo.trim();
   if (!/^\d{10,16}$/.test(trimmed)) {
     return { ok: false, error: "Meter ID must be numeric (10–16 digits)." };
   }
 
-  const longiConfig = getLongiConfigFromEnv();
+  const longiConfig = getLongiConfigForUtility(utility);
   if (!longiConfig) {
     return {
       ok: false,
       error:
-        "LONGi is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5 in .env.local.",
+        utility === "electricity"
+          ? "Electricity vending is not configured. Set LONGI_ELECTRICITY_USERNAME and LONGI_ELECTRICITY_PASSWORD_MD5 in .env.local."
+          : "LONGi is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5 in .env.local.",
     };
   }
 
@@ -301,7 +319,7 @@ export async function createMeter(input: unknown): Promise<CreateMeterResult> {
     latestReadingM3 = n;
   }
 
-  const longiConfig = getLongiConfigFromEnv();
+  const longiConfig = getLongiConfigForUtility(utilityOfModelType(d.modelType));
   const notes = buildNotes(d.notes, {
     installer: d.installer,
     firmware: d.firmware,
@@ -400,7 +418,7 @@ export async function bulkImportMeters(
     installedOn = iso;
   }
 
-  const longiConfig = getLongiConfigFromEnv();
+  const longiConfig = getLongiConfigForUtility(utilityOfModelType(d.modelType));
   let longiSession: string | undefined;
   if (longiConfig) {
     const login = await longiLogin(longiConfig);
