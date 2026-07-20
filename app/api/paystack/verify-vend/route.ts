@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { getLongiConfigFromEnv, longiVendToken, type LongiVendResult } from "@/lib/longi-vending";
+import {
+  getLongiConfigForUtility,
+  longiVendToken,
+  type LongiUtility,
+  type LongiVendResult,
+} from "@/lib/longi-vending";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 import { resolveMeterTenantContext } from "@/lib/tokens-data";
@@ -27,28 +32,38 @@ const processedReferences = new Map<string, LongiVendResult>();
 
 export async function POST(request: Request) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  const longiConfig = getLongiConfigFromEnv();
   if (!secretKey) {
     return NextResponse.json(
       { ok: false, error: "PAYSTACK_SECRET_KEY is not configured on the server." },
       { status: 503 }
     );
   }
+
+  let body: { reference?: string; meterNo?: string; amount?: number; utility?: string };
+  try {
+    body = (await request.json()) as {
+      reference?: string;
+      meterNo?: string;
+      amount?: number;
+      utility?: string;
+    };
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const utility: LongiUtility = body.utility === "electricity" ? "electricity" : "water";
+  const longiConfig = getLongiConfigForUtility(utility);
   if (!longiConfig) {
     return NextResponse.json(
       {
         ok: false,
-        error: "LONGi vending is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5.",
+        error:
+          utility === "electricity"
+            ? "Electricity vending is not configured. Set LONGI_ELECTRICITY_USERNAME and LONGI_ELECTRICITY_PASSWORD_MD5."
+            : "LONGi vending is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5.",
       },
       { status: 503 }
     );
-  }
-
-  let body: { reference?: string; meterNo?: string; amount?: number };
-  try {
-    body = (await request.json()) as { reference?: string; meterNo?: string; amount?: number };
-  } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
   const reference = String(body.reference ?? "").trim();
