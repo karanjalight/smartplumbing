@@ -40,7 +40,9 @@ export type MeterConnectivity =
 export type MeterModelType =
   | "water_prepay_m3"
   | "water_prepay_currency"
-  | "postpay";
+  | "postpay"
+  | "electricity_prepay_kwh"
+  | "electricity_prepay_currency";
 export type PaymentMethod = "M-Pesa" | "Bank" | "Cash" | "STS credit" | "Card";
 export type PaymentCategory = "rent" | "tokens" | "service" | "shop";
 export type PaymentStatus =
@@ -236,6 +238,7 @@ export type TenantRow = Timestamps & {
   building_id: string | null;
   unit_id: string | null;
   meter_id: string | null;
+  electricity_meter_id: string | null;
   full_name: string;
   phone: string | null;
   email: string | null;
@@ -785,6 +788,7 @@ export type Database = {
           building_name: string | null;
           unit_label: string | null;
           meter_no: string | null;
+          electricity_meter_no: string | null;
         }
       >;
       meter_directory: ViewDef<
