@@ -8,6 +8,7 @@ import {
   Droplets,
   Loader2,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -54,6 +55,7 @@ declare global {
             variable_name?: string;
             value?: string;
           }>;
+          utility?: string;
         };
         onClose?: () => void;
         callback?: (response: { reference: string }) => void;
@@ -102,21 +104,34 @@ export function ClientPaymentsView({
 }: {
   profile: ClientTenantProfile;
 }) {
-  const [paymentType, setPaymentType] = useState<"water" | "rent">("water");
+  const [paymentType, setPaymentType] = useState<"water" | "electricity" | "rent">("water");
   const [amountInput, setAmountInput] = useState<string>("1000");
+  const [electricityAmountInput, setElectricityAmountInput] = useState<string>("1000");
   const [rentAmountInput, setRentAmountInput] = useState<string>(() =>
     String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes)
   );
   const [purchaseResult, setPurchaseResult] = useState<PurchaseOk | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  const [purchasingElectricity, setPurchasingElectricity] = useState(false);
   const [payingRent, setPayingRent] = useState(false);
   const [rentResult, setRentResult] = useState<RentResult | null>(null);
   const payerEmail = profile.email.includes("@") ? profile.email : "client@smartone.app";
   const meterNo = profile.meterNo.trim();
+  const electricityMeterNo = profile.electricityMeterNo.trim();
 
   const derived = useMemo(() => {
     if (paymentType === "rent") {
       const parsedAmount = Number(rentAmountInput);
+      const amountKes = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
+      return {
+        amountKes,
+        tokens: 0,
+        litres: 0,
+      };
+    }
+
+    if (paymentType === "electricity") {
+      const parsedAmount = Number(electricityAmountInput);
       const amountKes = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
       return {
         amountKes,
@@ -133,9 +148,14 @@ export function ClientPaymentsView({
       tokens,
       litres: tokens * LITRES_PER_TOKEN,
     };
-  }, [paymentType, amountInput, rentAmountInput]);
+  }, [paymentType, amountInput, rentAmountInput, electricityAmountInput]);
 
-  async function verifyAndVend(reference: string, meter: string, amountKes: number) {
+  async function verifyAndVend(
+    reference: string,
+    meter: string,
+    amountKes: number,
+    utility: "water" | "electricity",
+  ) {
     try {
       const verifyRes = await fetch("/api/paystack/verify-vend", {
         method: "POST",
@@ -144,6 +164,7 @@ export function ClientPaymentsView({
           reference,
           meterNo: meter,
           amount: amountKes,
+          utility,
         }),
       });
       const data = (await verifyRes.json()) as {
@@ -178,7 +199,11 @@ export function ClientPaymentsView({
     } catch {
       toast.error("Payment succeeded, but verification failed. Contact support with your reference.");
     } finally {
-      setPurchasing(false);
+      if (utility === "electricity") {
+        setPurchasingElectricity(false);
+      } else {
+        setPurchasing(false);
+      }
     }
   }
 
@@ -240,7 +265,7 @@ export function ClientPaymentsView({
           setPurchasing(false);
         },
         callback: (response) => {
-          void verifyAndVend(response.reference, meterNo, amountKes);
+          void verifyAndVend(response.reference, meterNo, amountKes, "water");
         },
       }).openIframe();
     } catch (error: unknown) {
@@ -251,6 +276,79 @@ export function ClientPaymentsView({
       }
       toast.error(`Could not start payment: ${getErrorMessage(error)}`);
       setPurchasing(false);
+    }
+  }
+
+  async function handlePurchaseElectricity() {
+    if (!electricityMeterNo) {
+      toast.error("No electricity meter is linked to your account. Contact your landlord.");
+      return;
+    }
+    if (derived.amountKes <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+    if (!paystackPublicKey) {
+      toast.error("Paystack public key is missing. Set NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY.");
+      return;
+    }
+    if (!payerEmail.trim() || !payerEmail.includes("@")) {
+      toast.error("Enter a valid email address for payment.");
+      return;
+    }
+
+    setPurchasingElectricity(true);
+    setPurchaseResult(null);
+    try {
+      const reference = `smartone-elec-${Date.now()}-${electricityMeterNo.slice(-5)}`;
+      const amountKes = Number(derived.amountKes.toFixed(2));
+
+      await ensurePaystackLoaded();
+      if (!window.PaystackPop) {
+        toast.error("Paystack modal is unavailable. Disable blockers and try again.");
+        setPurchasingElectricity(false);
+        return;
+      }
+
+      const commonMetadata = {
+        custom_fields: [
+          { display_name: "Meter No", variable_name: "meter_no", value: electricityMeterNo },
+          { display_name: "Customer", variable_name: "customer_name", value: profile.name },
+          { display_name: "House", variable_name: "house", value: profile.houseLabel },
+        ],
+        utility: "electricity",
+      };
+
+      const paystackPop = window.PaystackPop;
+      if (!paystackPop?.setup) {
+        toast.error("Paystack popup setup is unavailable. Refresh and try again.");
+        setPurchasingElectricity(false);
+        return;
+      }
+      paystackPop.setup({
+        key: paystackPublicKey,
+        email: payerEmail,
+        amount: Math.round(amountKes * 100),
+        currency: "KES",
+        ref: reference,
+        metadata: commonMetadata,
+        onClose: () => {
+          toast.message("Payment window closed.");
+          setPurchasingElectricity(false);
+        },
+        callback: (response) => {
+          void verifyAndVend(response.reference, electricityMeterNo, amountKes, "electricity");
+        },
+      }).openIframe();
+    } catch (error: unknown) {
+      if (error instanceof Error && /Paystack script failed to load/i.test(error.message)) {
+        toast.error("Could not load Paystack modal. Check internet/ad-blocker and try again.");
+        setPurchasingElectricity(false);
+        return;
+      }
+      toast.error(`Could not start payment: ${getErrorMessage(error)}`);
+      setPurchasingElectricity(false);
     }
   }
 
@@ -385,7 +483,11 @@ export function ClientPaymentsView({
                 name="payment-type"
                 className="sr-only"
                 checked={paymentType === "water"}
-                onChange={() => setPaymentType("water")}
+                onChange={() => {
+                  setPaymentType("water");
+                  setPurchaseResult(null);
+                  setRentResult(null);
+                }}
               />
               <span
                 className={
@@ -396,6 +498,30 @@ export function ClientPaymentsView({
               >
                 <Droplets className="size-4" aria-hidden />
                 Buy Tokens
+              </span>
+            </label>
+
+            <label className="flex-1 cursor-pointer">
+              <input
+                type="radio"
+                name="payment-type"
+                className="sr-only"
+                checked={paymentType === "electricity"}
+                onChange={() => {
+                  setPaymentType("electricity");
+                  setPurchaseResult(null);
+                  setRentResult(null);
+                }}
+              />
+              <span
+                className={
+                  paymentType === "electricity"
+                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
+                    : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
+                }
+              >
+                <Zap className="size-4" aria-hidden />
+                Buy Electricity
               </span>
             </label>
 
@@ -430,7 +556,7 @@ export function ClientPaymentsView({
               <p className="text-xs text-white/70">Amount to pay</p>
               <CalendarDays className="size-4 text-white/70" aria-hidden />
             </div>
-            {paymentType === "water" && purchaseResult ? (
+            {(paymentType === "water" || paymentType === "electricity") && purchaseResult ? (
               <div className="mt-2">
                 <p className="text-xs text-white/75">Purchased token</p>
                 <p className="mt-1 break-all font-mono text-lg font-semibold tracking-tight">
@@ -466,6 +592,25 @@ export function ClientPaymentsView({
                   />
                 </div>
               </div>
+            ) : paymentType === "electricity" ? (
+              <div className="mt-2">
+                <label className="sr-only" htmlFor="electricity-amount-to-pay">
+                  Electricity amount to pay in Kenya shillings
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-semibold">KSh</span>
+                  <input
+                    id="electricity-amount-to-pay"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={electricityAmountInput}
+                    onChange={(e) => setElectricityAmountInput(e.target.value)}
+                    className="w-full border-b border-white/30 bg-transparent py-1 text-3xl font-semibold tracking-tight outline-none placeholder:text-white/50"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             ) : (
               <div className="mt-2">
                 <label className="sr-only" htmlFor="rent-amount-to-pay">
@@ -487,7 +632,7 @@ export function ClientPaymentsView({
               </div>
             )}
 
-            {paymentType === "water" && purchaseResult ? (
+            {(paymentType === "water" || paymentType === "electricity") && purchaseResult ? (
               <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
                 <p className="text-white/65">Transaction details</p>
                 <p className="mt-1 text-sm font-semibold">Order: {purchaseResult.orderNo}</p>
@@ -507,6 +652,11 @@ export function ClientPaymentsView({
                     {derived.litres.toLocaleString()}
                   </p>
                 </div>
+              </div>
+            ) : paymentType === "electricity" ? (
+              <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
+                <p className="text-white/65">Electricity meter</p>
+                <p className="mt-1 text-base font-semibold">{electricityMeterNo || "—"}</p>
               </div>
             ) : rentResult ? (
               <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
@@ -568,6 +718,48 @@ export function ClientPaymentsView({
                 </p>
               </div>
             </div>
+          ) : paymentType === "electricity" ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Your electricity meter
+                </p>
+                {electricityMeterNo ? (
+                  <p className="mt-2 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {electricityMeterNo}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    No electricity meter linked yet. Contact your landlord to assign one.
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {profile.houseLabel} · {profile.propertyName}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Quick select amount
+                </p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {PRESET_AMOUNTS.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setElectricityAmountInput(String(amount))}
+                      className={
+                        Number(electricityAmountInput) === amount
+                          ? "rounded-xl bg-[#0A4266] px-2 py-2 text-xs font-semibold text-white"
+                          : "rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      }
+                    >
+                      KSh {amount.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800">
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Rent details</p>
@@ -595,20 +787,34 @@ export function ClientPaymentsView({
 
           <button
             type="button"
-            onClick={paymentType === "water" ? handlePurchaseTokens : handlePayRent}
+            onClick={
+              paymentType === "water"
+                ? handlePurchaseTokens
+                : paymentType === "electricity"
+                  ? handlePurchaseElectricity
+                  : handlePayRent
+            }
             disabled={
               paymentType === "water"
                 ? purchasing || !meterNo
-                : payingRent || !profile.tenantId || derived.amountKes <= 0
+                : paymentType === "electricity"
+                  ? purchasingElectricity || !electricityMeterNo
+                  : payingRent || !profile.tenantId || derived.amountKes <= 0
             }
             className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0A4266] text-sm font-semibold text-white shadow-lg shadow-[#0A4266]/30 transition hover:bg-[#083d5c] disabled:opacity-50"
           >
-            {(paymentType === "water" && purchasing) || (paymentType === "rent" && payingRent) ? (
+            {(paymentType === "water" && purchasing) ||
+            (paymentType === "electricity" && purchasingElectricity) ||
+            (paymentType === "rent" && payingRent) ? (
               <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
             ) : (
               <Wallet className="mr-2 size-4" aria-hidden />
             )}
-            {paymentType === "water" ? "Pay for tokens" : "Pay rent"}
+            {paymentType === "water"
+              ? "Pay for tokens"
+              : paymentType === "electricity"
+                ? "Pay for electricity"
+                : "Pay rent"}
           </button>
 
           <p className="mt-3 inline-flex w-full items-center justify-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
