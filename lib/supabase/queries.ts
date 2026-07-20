@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import type {
   BuildingRow,
   Database,
@@ -111,6 +112,8 @@ export type AdminUnitListRow = {
   landlordId: string | null;
   occupied: boolean;
   occupantName: string | null;
+  waterMeterNo: string | null;
+  electricityMeterNo: string | null;
 };
 
 /**
@@ -119,14 +122,16 @@ export type AdminUnitListRow = {
  * hand-written `Database` types. Admin RLS returns all rows.
  */
 export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> {
-  const [unitsRes, buildingsRes, tenantsRes] = await Promise.all([
+  const [unitsRes, buildingsRes, tenantsRes, metersRes] = await Promise.all([
     client.from("units").select("*"),
     client.from("buildings").select("*"),
     client.from("tenants").select("*"),
+    client.from("meters").select("*"),
   ]);
   if (unitsRes.error) throw unitsRes.error;
   if (buildingsRes.error) throw buildingsRes.error;
   if (tenantsRes.error) throw tenantsRes.error;
+  if (metersRes.error) throw metersRes.error;
 
   const buildings = new Map<string, BuildingRow>(
     (buildingsRes.data ?? []).map((b) => [b.id, b])
@@ -138,6 +143,13 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
     arr.push(t);
     tenantsByUnit.set(t.unit_id, arr);
   }
+  const metersByUnit = new Map<string, MeterRow[]>();
+  for (const m of metersRes.data ?? []) {
+    if (!m.unit_id) continue;
+    const arr = metersByUnit.get(m.unit_id) ?? [];
+    arr.push(m);
+    metersByUnit.set(m.unit_id, arr);
+  }
 
   const rows: AdminUnitListRow[] = (unitsRes.data ?? []).map((u) => {
     const building = buildings.get(u.building_id) ?? null;
@@ -145,6 +157,13 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
     const primaryTenant =
       unitTenants.find((t) => t.status !== "inactive") ?? unitTenants[0] ?? null;
     const occupied = unitTenants.length > 0 ? true : !u.is_vacant;
+    const unitMeters = metersByUnit.get(u.id) ?? [];
+    const waterMeter = unitMeters.find(
+      (m) => utilityOfModelType(m.model_type as MeterModelType) === "water"
+    );
+    const electricityMeter = unitMeters.find(
+      (m) => utilityOfModelType(m.model_type as MeterModelType) === "electricity"
+    );
     return {
       id: u.id,
       code: u.code,
@@ -158,6 +177,8 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
       landlordId: building?.landlord_id ?? null,
       occupied,
       occupantName: primaryTenant?.full_name ?? null,
+      waterMeterNo: waterMeter?.meter_no ?? null,
+      electricityMeterNo: electricityMeter?.meter_no ?? null,
     };
   });
 
