@@ -142,12 +142,9 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
   const rows: AdminUnitListRow[] = (unitsRes.data ?? []).map((u) => {
     const building = buildings.get(u.building_id) ?? null;
     const unitTenants = tenantsByUnit.get(u.id) ?? [];
-    const activeTenant = unitTenants.find((t) => t.status !== "inactive");
-    const occupied = activeTenant
-      ? true
-      : unitTenants.length === 0
-        ? !u.is_vacant
-        : false;
+    const primaryTenant =
+      unitTenants.find((t) => t.status !== "inactive") ?? unitTenants[0] ?? null;
+    const occupied = unitTenants.length > 0 ? true : !u.is_vacant;
     return {
       id: u.id,
       code: u.code,
@@ -160,7 +157,7 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
       buildingName: building?.name ?? "—",
       landlordId: building?.landlord_id ?? null,
       occupied,
-      occupantName: activeTenant?.full_name ?? null,
+      occupantName: primaryTenant?.full_name ?? null,
     };
   });
 
