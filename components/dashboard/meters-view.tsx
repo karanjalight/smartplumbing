@@ -15,6 +15,7 @@ import {
   UserRound,
   Wifi,
   WifiOff,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -29,10 +30,12 @@ import {
   getMeterRows,
   meterTypeLabel,
   TABLE_PAGE_SIZE_OPTIONS,
+  utilityOfModelType,
   type MeterConnectivity,
   type MeterLifecycleStatus,
   type MeterModelType,
   type MeterRow,
+  type MeterUtility,
 } from "@/lib/meters-data";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -73,6 +76,16 @@ const TYPE_FILTER_OPTIONS: {
   { key: "water_prepay_m3", label: "Prepay water (m3)", hint: "LONGi meterType 1" },
   { key: "water_prepay_currency", label: "Prepay water (currency)", hint: "Currency-denominated prepaid" },
   { key: "postpay", label: "Postpay", hint: "Billed after consumption" },
+];
+
+const UTILITY_FILTER_OPTIONS: {
+  key: "all" | MeterUtility;
+  label: string;
+  hint: string;
+}[] = [
+  { key: "all", label: "All utilities", hint: "Water + electricity meters" },
+  { key: "water", label: "Water", hint: "Water prepay + postpay meters" },
+  { key: "electricity", label: "Electricity", hint: "Electricity prepay meters" },
 ];
 
 function meterStatusBadge(status: MeterLifecycleStatus) {
@@ -131,6 +144,7 @@ export function MetersView() {
   const [statusFilter, setStatusFilter] = useState<"all" | MeterLifecycleStatus>("all");
   const [connectivityFilter, setConnectivityFilter] = useState<"all" | MeterConnectivity>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | MeterModelType>("all");
+  const [utilityFilter, setUtilityFilter] = useState<"all" | MeterUtility>("all");
   const [quickFilter, setQuickFilter] = useState<"all" | "attention" | "healthy">("all");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [statusQuery, setStatusQuery] = useState("");
@@ -138,12 +152,15 @@ export function MetersView() {
   const [connectivityQuery, setConnectivityQuery] = useState("");
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [typeQuery, setTypeQuery] = useState("");
+  const [utilityMenuOpen, setUtilityMenuOpen] = useState(false);
+  const [utilityQuery, setUtilityQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
 
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const connectivityMenuRef = useRef<HTMLDivElement>(null);
   const typeMenuRef = useRef<HTMLDivElement>(null);
+  const utilityMenuRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const supabase = tryGetSupabaseBrowserClient();
@@ -173,6 +190,7 @@ export function MetersView() {
       if (statusMenuRef.current && !statusMenuRef.current.contains(target)) setStatusMenuOpen(false);
       if (connectivityMenuRef.current && !connectivityMenuRef.current.contains(target)) setConnectivityMenuOpen(false);
       if (typeMenuRef.current && !typeMenuRef.current.contains(target)) setTypeMenuOpen(false);
+      if (utilityMenuRef.current && !utilityMenuRef.current.contains(target)) setUtilityMenuOpen(false);
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
@@ -192,6 +210,7 @@ export function MetersView() {
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
       if (connectivityFilter !== "all" && r.connectivity !== connectivityFilter) return false;
       if (typeFilter !== "all" && r.modelType !== typeFilter) return false;
+      if (utilityFilter !== "all" && utilityOfModelType(r.modelType) !== utilityFilter) return false;
       if (!q) return true;
       return (
         r.meterId.toLowerCase().includes(q) ||
@@ -204,7 +223,7 @@ export function MetersView() {
         meterTypeLabel(r.modelType).toLowerCase().includes(q)
       );
     });
-  }, [allRows, search, statusFilter, connectivityFilter, typeFilter]);
+  }, [allRows, search, statusFilter, connectivityFilter, typeFilter, utilityFilter]);
 
   const quickFilterCounts = useMemo(() => {
     const base = matchesFiltersAndSearch;
@@ -238,6 +257,11 @@ export function MetersView() {
     return TYPE_FILTER_OPTIONS.filter((o) => !q || o.label.toLowerCase().includes(q) || o.hint.toLowerCase().includes(q) || o.key.includes(q));
   }, [typeQuery]);
 
+  const utilityOptions = useMemo(() => {
+    const q = utilityQuery.trim().toLowerCase();
+    return UTILITY_FILTER_OPTIONS.filter((o) => !q || o.label.toLowerCase().includes(q) || o.hint.toLowerCase().includes(q) || o.key.includes(q));
+  }, [utilityQuery]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
   useEffect(() => setPage(1), [pageSize, quickFilter]);
@@ -251,6 +275,7 @@ export function MetersView() {
   const statusLabel = STATUS_FILTER_OPTIONS.find((o) => o.key === statusFilter)?.label ?? "All meter states";
   const connectivityLabel = CONNECTIVITY_FILTER_OPTIONS.find((o) => o.key === connectivityFilter)?.label ?? "All connectivity";
   const typeLabel = TYPE_FILTER_OPTIONS.find((o) => o.key === typeFilter)?.label ?? "All meter types";
+  const utilityLabel = UTILITY_FILTER_OPTIONS.find((o) => o.key === utilityFilter)?.label ?? "All utilities";
 
   return (
     <div className="space-y-6">
@@ -377,7 +402,66 @@ export function MetersView() {
           />
         </div>
 
-        <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-3">
+        <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-4">
+          <div ref={utilityMenuRef} className="relative min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                setUtilityMenuOpen((o) => !o);
+                setTypeMenuOpen(false);
+                setStatusMenuOpen(false);
+                setConnectivityMenuOpen(false);
+                if (!utilityMenuOpen) setUtilityQuery("");
+              }}
+              className={DROPDOWN_TRIGGER}
+              aria-expanded={utilityMenuOpen}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Zap className="size-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">{utilityLabel}</span>
+              </span>
+              <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", utilityMenuOpen && "rotate-180")} />
+            </button>
+            {utilityMenuOpen && (
+              <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-lg dark:border-border/80" role="listbox">
+                <div className="border-b border-border p-2 dark:border-border/80">
+                  <Input
+                    type="search"
+                    placeholder="Search utilities..."
+                    value={utilityQuery}
+                    onChange={(e) => setUtilityQuery(e.target.value)}
+                    className="h-8 rounded-lg text-sm"
+                    autoFocus
+                  />
+                </div>
+                <ul className="max-h-56 overflow-y-auto p-1">
+                  {utilityOptions.map((o) => (
+                    <li key={o.key}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={utilityFilter === o.key}
+                        onClick={() => {
+                          setUtilityFilter(o.key);
+                          setUtilityMenuOpen(false);
+                          setUtilityQuery("");
+                          setPage(1);
+                        }}
+                        className={cn("flex w-full flex-col gap-0.5 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted", utilityFilter === o.key && "bg-muted/80")}
+                      >
+                        <span className="flex items-center gap-2">
+                          {utilityFilter === o.key && <Check className="size-4 shrink-0 text-[#0A4266] dark:text-[#6BB4E8]" />}
+                          <span className={cn("font-medium", utilityFilter !== o.key && "pl-6")}>{o.label}</span>
+                        </span>
+                        <span className="pl-6 text-xs text-muted-foreground">{o.hint}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
           <div ref={typeMenuRef} className="relative min-w-0">
             <button
               type="button"
@@ -385,6 +469,7 @@ export function MetersView() {
                 setTypeMenuOpen((o) => !o);
                 setStatusMenuOpen(false);
                 setConnectivityMenuOpen(false);
+                setUtilityMenuOpen(false);
                 if (!typeMenuOpen) setTypeQuery("");
               }}
               className={DROPDOWN_TRIGGER}
@@ -443,6 +528,7 @@ export function MetersView() {
                 setConnectivityMenuOpen((o) => !o);
                 setStatusMenuOpen(false);
                 setTypeMenuOpen(false);
+                setUtilityMenuOpen(false);
                 if (!connectivityMenuOpen) setConnectivityQuery("");
               }}
               className={DROPDOWN_TRIGGER}
@@ -501,6 +587,7 @@ export function MetersView() {
                 setStatusMenuOpen((o) => !o);
                 setConnectivityMenuOpen(false);
                 setTypeMenuOpen(false);
+                setUtilityMenuOpen(false);
                 if (!statusMenuOpen) setStatusQuery("");
               }}
               className={DROPDOWN_TRIGGER}
