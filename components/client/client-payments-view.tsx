@@ -15,12 +15,22 @@ import { toast } from "sonner";
 
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
-import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import {
+  getAvailablePaymentTypes,
+  type ClientTenantProfile,
+  type PaymentType,
+} from "@/lib/client-tenant-profile";
 import { formatKes } from "@/lib/tenants-data";
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 5000, 10000];
 const KES_PER_TOKEN = 150;
 const LITRES_PER_TOKEN = 1000;
+
+const PAYMENT_TAB_CONFIG: Array<{ type: PaymentType; icon: typeof Droplets; label: string }> = [
+  { type: "water", icon: Droplets, label: "Buy Tokens" },
+  { type: "electricity", icon: Zap, label: "Buy Electricity" },
+  { type: "rent", icon: Building2, label: "Pay Rent" },
+];
 
 type PurchaseOk = {
   orderNo: string;
@@ -104,7 +114,8 @@ export function ClientPaymentsView({
 }: {
   profile: ClientTenantProfile;
 }) {
-  const [paymentType, setPaymentType] = useState<"water" | "electricity" | "rent">("water");
+  const availableTypes = getAvailablePaymentTypes(profile);
+  const [paymentType, setPaymentType] = useState<PaymentType>(() => availableTypes[0]);
   const [amountInput, setAmountInput] = useState<string>("1000");
   const [electricityAmountInput, setElectricityAmountInput] = useState<string>("1000");
   const [rentAmountInput, setRentAmountInput] = useState<string>(() =>
@@ -477,78 +488,39 @@ export function ClientPaymentsView({
           </p>
 
           <div className="mt-5 flex gap-2 rounded-2xl bg-white/10 p-1.5">
-            <label className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="payment-type"
-                className="sr-only"
-                checked={paymentType === "water"}
-                onChange={() => {
-                  setPaymentType("water");
-                  setPurchaseResult(null);
-                  setRentResult(null);
-                }}
-              />
-              <span
-                className={
-                  paymentType === "water"
-                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
-                    : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
-                }
-              >
-                <Droplets className="size-4" aria-hidden />
-                Buy Tokens
-              </span>
-            </label>
-
-            <label className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="payment-type"
-                className="sr-only"
-                checked={paymentType === "electricity"}
-                onChange={() => {
-                  setPaymentType("electricity");
-                  setPurchaseResult(null);
-                  setRentResult(null);
-                }}
-              />
-              <span
-                className={
-                  paymentType === "electricity"
-                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
-                    : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
-                }
-              >
-                <Zap className="size-4" aria-hidden />
-                Buy Electricity
-              </span>
-            </label>
-
-            <label className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="payment-type"
-                className="sr-only"
-                checked={paymentType === "rent"}
-                onChange={() => {
-                  setPaymentType("rent");
-                  setPurchaseResult(null);
-                  setRentResult(null);
-                  setRentAmountInput(String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes));
-                }}
-              />
-              <span
-                className={
-                  paymentType === "rent"
-                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
-                    : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
-                }
-              >
-                <Building2 className="size-4" aria-hidden />
-                Pay Rent
-              </span>
-            </label>
+            {PAYMENT_TAB_CONFIG.filter((tab) => availableTypes.includes(tab.type)).map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <label key={tab.type} className="flex-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="payment-type"
+                    className="sr-only"
+                    checked={paymentType === tab.type}
+                    onChange={() => {
+                      setPaymentType(tab.type);
+                      setPurchaseResult(null);
+                      setRentResult(null);
+                      if (tab.type === "rent") {
+                        setRentAmountInput(
+                          String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes)
+                        );
+                      }
+                    }}
+                  />
+                  <span
+                    className={
+                      paymentType === tab.type
+                        ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
+                        : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
+                    }
+                  >
+                    <Icon className="size-4" aria-hidden />
+                    {tab.label}
+                  </span>
+                </label>
+              );
+            })}
           </div>
 
           <div className="mt-5 rounded-2xl border border-white/15 bg-white/10 p-4">
