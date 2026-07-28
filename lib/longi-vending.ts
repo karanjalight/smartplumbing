@@ -414,6 +414,90 @@ export async function longiVendToken(
   };
 }
 
+/** Chapter 8: void a transaction so it can't be redeemed. */
+export async function longiCancelTransaction(
+  config: LongiConfig,
+  params: { orderNo: string }
+): Promise<{ ok: true; state?: number } | LongiVendError> {
+  const orderNo = params.orderNo.trim();
+  if (!orderNo) return { ok: false, error: "Order number is required", errorCode: 9004 };
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0) {
+    return {
+      ok: false,
+      error: login.errorMsg || `Login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  const url = new URL(`${config.baseUrl}/cancellation`);
+  url.searchParams.set("token", login.sessionId);
+  url.searchParams.set("orderNo", orderNo);
+  const { status, text } = await fetchLongiText(url.toString(), "GET");
+  const parsed = parseLongiBody(text, status, "cancellation");
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error, errorCode: -1 };
+  }
+
+  const data = parsed.data as ServiceBaseVo & { state?: number };
+  if (data.errorCode !== 0) {
+    const msg =
+      data.errorMsg ||
+      (data.errorCode === 3006
+        ? "This transaction has already been cancelled."
+        : data.errorCode === 3007
+          ? "This transaction can no longer be cancelled (it may already be redeemed)."
+          : data.errorCode === 3005
+            ? "This order does not exist."
+            : `Cancellation failed (${data.errorCode})`);
+    return { ok: false, error: msg, errorCode: data.errorCode };
+  }
+
+  return { ok: true, state: typeof data.state === "number" ? data.state : undefined };
+}
+
+/** Chapter 13: push the STS token straight to the meter over the network. */
+export async function longiWriteToken(
+  config: LongiConfig,
+  params: { meterNo: string; ststoken: string }
+): Promise<{ ok: true } | LongiVendError> {
+  const meterNo = params.meterNo.trim();
+  const ststoken = params.ststoken.trim();
+  if (!meterNo) return { ok: false, error: "Meter number is required", errorCode: 9002 };
+  if (!ststoken) return { ok: false, error: "STS token is required", errorCode: 9010 };
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0) {
+    return {
+      ok: false,
+      error: login.errorMsg || `Login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  const url = new URL(`${config.baseUrl}/writeToken`);
+  url.searchParams.set("token", login.sessionId);
+  url.searchParams.set("msno", meterNo);
+  url.searchParams.set("ststoken", ststoken);
+  const { status, text } = await fetchLongiText(url.toString(), "GET");
+  const parsed = parseLongiBody(text, status, "writeToken");
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error, errorCode: -1 };
+  }
+
+  const data = parsed.data as ServiceBaseVo;
+  if (data.errorCode !== 0) {
+    return {
+      ok: false,
+      error: data.errorMsg || `Remote token write failed (${data.errorCode})`,
+      errorCode: data.errorCode,
+    };
+  }
+
+  return { ok: true };
+}
+
 export function meterTypeLabel(meterType: number): string {
   switch (meterType) {
     case -1:
