@@ -222,7 +222,7 @@ async function fetchTenantLedgerContexts(
   return map;
 }
 
-async function fetchMeterModelTypesByIds(
+export async function fetchMeterModelTypesByIds(
   client: SupabaseClient<Database>,
   meterIds: string[],
 ): Promise<Map<string, MeterModelType>> {

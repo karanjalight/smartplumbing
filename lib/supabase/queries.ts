@@ -329,6 +329,40 @@ export async function listTokenPurchases(
   return data ?? [];
 }
 
+export type TokenPurchaseWithMeterRow = TokenPurchaseRow & {
+  meter_model_type: MeterModelType | null;
+  meter_landlord_id: string | null;
+};
+
+/** Single token purchase, joined to its meter's model_type + landlord (for delivery authorization). */
+export async function getTokenPurchaseById(
+  client: Client,
+  id: string
+): Promise<TokenPurchaseWithMeterRow | null> {
+  const { data: purchase, error } = await client
+    .from("token_purchases")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!purchase) return null;
+
+  let meterModelType: MeterModelType | null = null;
+  let meterLandlordId: string | null = null;
+  if (purchase.meter_id) {
+    const { data: meter, error: meterErr } = await client
+      .from("meters")
+      .select("model_type, landlord_id")
+      .eq("id", purchase.meter_id)
+      .maybeSingle();
+    if (meterErr) throw meterErr;
+    meterModelType = (meter?.model_type as MeterModelType) ?? null;
+    meterLandlordId = meter?.landlord_id ?? null;
+  }
+
+  return { ...purchase, meter_model_type: meterModelType, meter_landlord_id: meterLandlordId };
+}
+
 // ---------- Payouts -------------------------------------------------------
 
 export async function listPayouts(
