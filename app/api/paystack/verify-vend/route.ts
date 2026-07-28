@@ -29,7 +29,7 @@ type PaystackVerifyResponse = {
   };
 };
 
-const processedReferences = new Map<string, LongiVendResult>();
+const processedReferences = new Map<string, LongiVendResult & { purchaseId: string | null }>();
 
 export async function POST(request: Request) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
@@ -153,15 +153,16 @@ export async function POST(request: Request) {
     );
   }
 
-  await persistTokenPurchase({
+  const purchaseId = await persistTokenPurchase({
     reference,
     meterNo,
     amountKes,
     vend,
   });
 
-  processedReferences.set(reference, vend);
-  return NextResponse.json(vend);
+  const responseBody = { ...vend, purchaseId };
+  processedReferences.set(reference, responseBody);
+  return NextResponse.json(responseBody);
 }
 
 async function persistTokenPurchase(input: {
@@ -169,7 +170,7 @@ async function persistTokenPurchase(input: {
   meterNo: string;
   amountKes: number;
   vend: LongiVendResult;
-}) {
+}): Promise<string | null> {
   try {
     const admin = getSupabaseAdminClient();
 
@@ -179,11 +180,11 @@ async function persistTokenPurchase(input: {
       .eq("payment_ref", input.reference)
       .maybeSingle();
 
-    if (existing) return;
+    if (existing) return existing.id;
 
     const ctx = await resolveMeterTenantContext(admin, input.meterNo);
     const tokenFormatted = input.vend.token.trim();
-    if (!tokenFormatted) return;
+    if (!tokenFormatted) return null;
 
     const { data: inserted, error: insErr } = await admin
       .from("token_purchases")
@@ -206,7 +207,7 @@ async function persistTokenPurchase(input: {
       .select("id, created_at")
       .maybeSingle();
 
-    if (insErr || !inserted) return;
+    if (insErr || !inserted) return null;
 
     if (ctx.tenantId) {
       await admin
@@ -217,7 +218,10 @@ async function persistTokenPurchase(input: {
         } as never)
         .eq("id", ctx.tenantId);
     }
+
+    return inserted.id;
   } catch {
     // Vend succeeded; ledger write failure should not block the client response.
+    return null;
   }
 }
