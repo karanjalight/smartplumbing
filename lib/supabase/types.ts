@@ -53,6 +53,7 @@ export type PaymentStatus =
   | "cancelled";
 export type TokenSource = "app" | "m_pesa" | "manual";
 export type ManualTokenChannel = "office" | "call_center" | "field";
+export type TokenDeliveryStatus = "pending" | "uploaded" | "cancelled";
 export type StaffStatus = "active" | "on_leave" | "inactive";
 export type StaffServes = "tenants" | "landlords" | "both";
 export type StaffSkill =
@@ -297,6 +298,10 @@ export type TokenPurchaseRow = {
   payment_ref: string | null;
   issued_by: string | null;
   note: string | null;
+  delivery_status: TokenDeliveryStatus;
+  delivery_status_at: string | null;
+  delivery_status_by: string | null;
+  delivery_response: Json | null;
   created_at: string;
 }
 
@@ -827,6 +832,7 @@ export type Database = {
       payment_status: PaymentStatus;
       token_source: TokenSource;
       manual_token_channel: ManualTokenChannel;
+      token_delivery_status: TokenDeliveryStatus;
       staff_status: StaffStatus;
       staff_serves: StaffServes;
       staff_skill: StaffSkill;
