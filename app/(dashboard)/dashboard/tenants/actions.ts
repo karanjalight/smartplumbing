@@ -8,9 +8,11 @@ import { z } from "zod";
 import { buildTenantImpact } from "@/lib/delete/impact";
 import type { DeletePreviewResult } from "@/lib/delete/types";
 import { resolveLandlordId } from "@/lib/landlords-data";
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requirePublicSupabaseConfig } from "@/lib/supabase/env";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { findMeterAssignmentConflict } from "@/lib/tenant-meter-assignment";
 import { parseUiDateToIso } from "@/lib/tenants-data";
 import type {
   Database,
@@ -47,6 +49,7 @@ const createTenantSchema = z.object({
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   meterNo: z.string().optional(),
+  electricityMeterNo: z.string().optional(),
   leaseStart: z.string().min(1, "Lease start date is required."),
   leaseEnd: z.string().optional(),
   nationalId: z.string().optional(),
@@ -82,6 +85,7 @@ const updateTenantSchema = z.object({
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   meterNo: z.string().optional(),
+  electricityMeterNo: z.string().optional(),
   lastTokenAt: z.string().optional(),
   lastTokenPreview: z.string().optional(),
 });
@@ -197,6 +201,7 @@ async function resolveMeterIdForTenant(
   tenantId: string,
   meterNo: string | null | undefined,
   unitId: string | null,
+  targetColumn: "meter_id" | "electricity_meter_id" = "meter_id",
 ): Promise<{ ok: true; meterId: string | null } | { ok: false; error: string }> {
   const meterNoTrim = meterNo?.trim();
   if (!meterNoTrim || meterNoTrim === "—") {
@@ -205,7 +210,7 @@ async function resolveMeterIdForTenant(
 
   const { data: meterRow, error: meterErr } = await admin
     .from("meters")
-    .select("id, landlord_id")
+    .select("id, landlord_id, model_type")
     .eq("meter_no", meterNoTrim)
     .maybeSingle();
 
@@ -223,17 +228,34 @@ async function resolveMeterIdForTenant(
     return { ok: false, error: "That meter belongs to a different landlord." };
   }
 
-  const { data: meterTenant, error: meterTenantErr } = await admin
-    .from("tenants")
-    .select("id")
-    .eq("meter_id", meterRow.id)
-    .maybeSingle();
-
-  if (meterTenantErr) {
-    return { ok: false, error: meterTenantErr.message };
+  const expectedUtility = targetColumn === "electricity_meter_id" ? "electricity" : "water";
+  if (utilityOfModelType(meterRow.model_type as MeterModelType) !== expectedUtility) {
+    return {
+      ok: false,
+      error:
+        expectedUtility === "electricity"
+          ? "That meter is not an electricity meter."
+          : "That meter is not a water meter.",
+    };
   }
-  if (meterTenant && meterTenant.id !== tenantId) {
-    return { ok: false, error: "That meter is already linked to another tenant." };
+
+  const { data: conflictingTenants, error: conflictErr } = await admin
+    .from("tenants")
+    .select("id, meter_id, electricity_meter_id")
+    .or(`meter_id.eq.${meterRow.id},electricity_meter_id.eq.${meterRow.id}`);
+
+  if (conflictErr) {
+    return { ok: false, error: conflictErr.message };
+  }
+
+  const conflict = findMeterAssignmentConflict(
+    conflictingTenants ?? [],
+    tenantId,
+    meterRow.id,
+    targetColumn,
+  );
+  if (conflict.conflict) {
+    return { ok: false, error: conflict.error };
   }
 
   return { ok: true, meterId: meterRow.id };
@@ -261,6 +283,7 @@ export async function createTenantAccount(
     buildingId: buildingIdRaw,
     unitId: unitIdRaw,
     meterNo,
+    electricityMeterNo,
     leaseStart,
     leaseEnd,
     nationalId,
@@ -277,6 +300,7 @@ export async function createTenantAccount(
   const unitId = unitIdRaw ?? null;
   const emailNorm = email.trim().toLowerCase();
   let meterNoTrim = meterNo?.trim() || null;
+  const electricityMeterNoTrim = electricityMeterNo?.trim() || null;
   const nationalIdTrim = nationalId?.trim() || null;
   const kraPinTrim = kraPin?.trim() || null;
   const secondaryPhonesTrim = secondaryPhones?.trim() || null;
@@ -372,7 +396,7 @@ export async function createTenantAccount(
   if (meterNoTrim) {
     const { data: meterRow, error: meterErr } = await admin
       .from("meters")
-      .select("id, landlord_id")
+      .select("id, landlord_id, model_type")
       .eq("meter_no", meterNoTrim)
       .maybeSingle();
 
@@ -393,20 +417,77 @@ export async function createTenantAccount(
       };
     }
 
-    const { data: meterTenant, error: meterTenantErr } = await admin
+    if (utilityOfModelType(meterRow.model_type as MeterModelType) !== "water") {
+      return { ok: false, error: "That meter is not a water meter." };
+    }
+
+    const { data: conflictingTenants, error: meterTenantErr } = await admin
       .from("tenants")
       .select("id")
-      .eq("meter_id", meterRow.id)
-      .maybeSingle();
+      .or(`meter_id.eq.${meterRow.id},electricity_meter_id.eq.${meterRow.id}`);
 
     if (meterTenantErr) {
       return { ok: false, error: meterTenantErr.message };
     }
-    if (meterTenant) {
+    if (conflictingTenants && conflictingTenants.length > 0) {
       return { ok: false, error: "That meter is already linked to another tenant." };
     }
 
     meterId = meterRow.id;
+  }
+
+  let electricityMeterId: string | null = null;
+  if (electricityMeterNoTrim) {
+    const { data: electricityMeterRow, error: electricityMeterErr } = await admin
+      .from("meters")
+      .select("id, landlord_id, model_type")
+      .eq("meter_no", electricityMeterNoTrim)
+      .maybeSingle();
+
+    if (electricityMeterErr) {
+      return { ok: false, error: electricityMeterErr.message };
+    }
+    if (!electricityMeterRow) {
+      return {
+        ok: false,
+        error: `Meter ${electricityMeterNoTrim} was not found in inventory. Onboard it first or leave the electricity meter unassigned.`,
+      };
+    }
+
+    if (
+      electricityMeterRow.landlord_id &&
+      electricityMeterRow.landlord_id !== scopedLandlordId
+    ) {
+      return {
+        ok: false,
+        error: "That meter belongs to a different landlord.",
+      };
+    }
+
+    if (utilityOfModelType(electricityMeterRow.model_type as MeterModelType) !== "electricity") {
+      return { ok: false, error: "That meter is not an electricity meter." };
+    }
+
+    if (meterId && electricityMeterRow.id === meterId) {
+      return {
+        ok: false,
+        error: "That meter is already assigned as this tenant's water meter.",
+      };
+    }
+
+    const { data: conflictingElectricityTenants, error: electricityMeterTenantErr } = await admin
+      .from("tenants")
+      .select("id")
+      .or(`meter_id.eq.${electricityMeterRow.id},electricity_meter_id.eq.${electricityMeterRow.id}`);
+
+    if (electricityMeterTenantErr) {
+      return { ok: false, error: electricityMeterTenantErr.message };
+    }
+    if (conflictingElectricityTenants && conflictingElectricityTenants.length > 0) {
+      return { ok: false, error: "That meter is already linked to another tenant." };
+    }
+
+    electricityMeterId = electricityMeterRow.id;
   }
 
   const leaseNoteParts: string[] = [];
@@ -475,6 +556,7 @@ export async function createTenantAccount(
     building_id: buildingId,
     unit_id: unitId,
     meter_id: meterId,
+    electricity_meter_id: electricityMeterId,
     full_name: fullName.trim(),
     phone: phone.trim() || null,
     email: emailNorm,
@@ -518,6 +600,17 @@ export async function createTenantAccount(
       .eq("id", meterId);
   }
 
+  if (electricityMeterId) {
+    await admin
+      .from("meters")
+      .update({
+        landlord_id: scopedLandlordId,
+        building_id: buildingId,
+        unit_id: unitId,
+      })
+      .eq("id", electricityMeterId);
+  }
+
   const mergedMeta: Record<string, Json> = {
     ...userMetadata,
     smartone: {
@@ -559,6 +652,7 @@ export async function updateTenantRecord(input: unknown): Promise<ActionResult> 
     buildingId: buildingIdRaw,
     unitId: unitIdRaw,
     meterNo,
+    electricityMeterNo,
     lastTokenAt,
     lastTokenPreview,
   } = parsed.data;
@@ -643,11 +737,32 @@ export async function updateTenantRecord(input: unknown): Promise<ActionResult> 
     tenantId,
     meterNo,
     unitId,
+    "meter_id",
   );
   if (!meterResolved.ok) {
     return { ok: false, error: meterResolved.error };
   }
   const meterId = meterResolved.meterId;
+
+  const electricityMeterResolved = await resolveMeterIdForTenant(
+    admin,
+    scopedLandlordId,
+    tenantId,
+    electricityMeterNo,
+    unitId,
+    "electricity_meter_id",
+  );
+  if (!electricityMeterResolved.ok) {
+    return { ok: false, error: electricityMeterResolved.error };
+  }
+  const electricityMeterId = electricityMeterResolved.meterId;
+
+  if (meterId && electricityMeterId && meterId === electricityMeterId) {
+    return {
+      ok: false,
+      error: "The water meter and electricity meter cannot be the same physical meter.",
+    };
+  }
 
   const lastTokenIso = parseUiDateToIso(lastTokenAt);
   const tokenPreview =
@@ -663,6 +778,7 @@ export async function updateTenantRecord(input: unknown): Promise<ActionResult> 
     building_id: buildingId,
     unit_id: unitId,
     meter_id: meterId,
+    electricity_meter_id: electricityMeterId,
     last_token_at: lastTokenIso,
     last_token_preview: tokenPreview,
   };
@@ -693,6 +809,17 @@ export async function updateTenantRecord(input: unknown): Promise<ActionResult> 
         unit_id: unitId,
       })
       .eq("id", meterId);
+  }
+
+  if (electricityMeterId) {
+    await admin
+      .from("meters")
+      .update({
+        landlord_id: scopedLandlordId,
+        building_id: buildingId,
+        unit_id: unitId,
+      })
+      .eq("id", electricityMeterId);
   }
 
   if (existing.profile_id) {

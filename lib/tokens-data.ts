@@ -4,8 +4,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { listTokenPurchases } from "@/lib/supabase/queries";
-import type { Database, TokenPurchaseRow as DbTokenPurchaseRow } from "@/lib/supabase/types";
+import type {
+  Database,
+  TokenDeliveryStatus,
+  TokenPurchaseRow as DbTokenPurchaseRow,
+} from "@/lib/supabase/types";
 import { MOCK_TENANTS } from "@/lib/tenants-data";
 
 export type ManualTokenChannel = "office" | "call_center" | "field";
@@ -23,6 +28,11 @@ export type TokenPurchaseRow = {
   property: string | null;
   orderNo: string;
   source: TokenPurchaseSource;
+  /** Derived from the linked meter's model_type; "water" when the meter can't be resolved. */
+  utility: "water" | "electricity";
+  /** Electricity only — always "pending" for water rows. */
+  deliveryStatus: TokenDeliveryStatus;
+  deliveryStatusAt: string | null;
   /** Manual issuance only */
   channel?: ManualTokenChannel;
   note?: string | null;
@@ -72,6 +82,9 @@ function manualRowsFromTenants(): TokenPurchaseRow[] {
     property: t.property,
     orderNo: `ORD-MAN-202604${String(100 + i).slice(-3)}`,
     source: "manual" as const,
+    utility: "water" as const,
+    deliveryStatus: "pending" as const,
+    deliveryStatusAt: null,
     channel: i % 3 === 0 ? "office" : i % 3 === 1 ? "call_center" : "field",
     note: i === 0 ? "Customer app SMS failed" : null,
   }));
@@ -92,6 +105,9 @@ function digitalPurchaseRows(): TokenPurchaseRow[] {
       property: t.property,
       orderNo: isMpesa ? `ORD-STK-${String(240400 + i)}` : `ORD-APP-${String(8800 + i)}`,
       source: isMpesa ? ("m_pesa" as const) : ("app" as const),
+      utility: "water" as const,
+      deliveryStatus: "pending" as const,
+      deliveryStatusAt: null,
       paymentRef: isMpesa ? `QKQ${String(1234567 + i)}` : null,
       note: null,
     };
@@ -156,6 +172,7 @@ function formatPurchaseTimestamp(iso: string): string {
 export function mapDbTokenPurchaseToUiRow(
   row: DbTokenPurchaseRow,
   tenant?: TenantLedgerContext | null,
+  meterModelType?: MeterModelType | null,
 ): TokenPurchaseRow {
   return {
     id: row.id,
@@ -167,6 +184,9 @@ export function mapDbTokenPurchaseToUiRow(
     property: tenant?.property ?? null,
     orderNo: row.longi_order_no ?? row.id.slice(0, 8).toUpperCase(),
     source: row.source,
+    utility: meterModelType ? utilityOfModelType(meterModelType) : "water",
+    deliveryStatus: row.delivery_status,
+    deliveryStatusAt: row.delivery_status_at,
     channel: row.manual_channel ?? undefined,
     note: row.note,
     paymentRef: row.payment_ref,
@@ -215,6 +235,23 @@ async function fetchTenantLedgerContexts(
   return map;
 }
 
+export async function fetchMeterModelTypesByIds(
+  client: SupabaseClient<Database>,
+  meterIds: string[],
+): Promise<Map<string, MeterModelType>> {
+  const map = new Map<string, MeterModelType>();
+  if (meterIds.length === 0) return map;
+  const { data, error } = await client
+    .from("meters")
+    .select("id, model_type")
+    .in("id", meterIds);
+  if (error) throw error;
+  for (const m of data ?? []) {
+    map.set(m.id, m.model_type as MeterModelType);
+  }
+  return map;
+}
+
 /** Admin tokens ledger from Supabase. */
 export async function fetchTokenPurchaseRows(
   client: SupabaseClient<Database>,
@@ -224,9 +261,19 @@ export async function fetchTokenPurchaseRows(
   const tenantIds = [
     ...new Set(rows.map((r) => r.tenant_id).filter((id): id is string => Boolean(id))),
   ];
-  const tenantMap = await fetchTenantLedgerContexts(client, tenantIds);
+  const meterIds = [
+    ...new Set(rows.map((r) => r.meter_id).filter((id): id is string => Boolean(id))),
+  ];
+  const [tenantMap, meterModelTypeMap] = await Promise.all([
+    fetchTenantLedgerContexts(client, tenantIds),
+    fetchMeterModelTypesByIds(client, meterIds),
+  ]);
   return rows.map((row) =>
-    mapDbTokenPurchaseToUiRow(row, row.tenant_id ? tenantMap.get(row.tenant_id) : null),
+    mapDbTokenPurchaseToUiRow(
+      row,
+      row.tenant_id ? tenantMap.get(row.tenant_id) : null,
+      row.meter_id ? meterModelTypeMap.get(row.meter_id) : null,
+    ),
   );
 }
 
@@ -249,16 +296,21 @@ export async function resolveMeterTenantContext(
 
   const { data: meter } = await client
     .from("meters")
-    .select("id, landlord_id")
+    .select("id, landlord_id, model_type")
     .eq("meter_no", trimmed)
     .maybeSingle();
 
   if (!meter) return empty;
 
+  const tenantMeterColumn =
+    utilityOfModelType(meter.model_type as MeterModelType) === "electricity"
+      ? "electricity_meter_id"
+      : "meter_id";
+
   const { data: tenant } = await client
     .from("tenants")
     .select("id, full_name, landlord_id, building_id, unit_id")
-    .eq("meter_id", meter.id)
+    .eq(tenantMeterColumn, meter.id)
     .maybeSingle();
 
   let property: string | null = null;

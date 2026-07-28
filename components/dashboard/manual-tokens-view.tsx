@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { issueManualToken } from "@/app/(dashboard)/dashboard/tokens/actions";
+import {
+  cancelPurchasedToken,
+  issueManualToken,
+  uploadPurchasedToken,
+} from "@/app/(dashboard)/dashboard/tokens/actions";
 import { MeterSearchSelect } from "@/components/dashboard/meter-search-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
@@ -34,12 +38,17 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
 
   const [sessionIssues, setSessionIssues] = useState(0);
   const [lastResult, setLastResult] = useState<{
+    purchaseId: string;
     tokenFormatted: string;
     orderNo: string;
     amountKes: number;
     meterNo: string;
     at: string;
+    utility: "water" | "electricity";
+    deliveryStatus: "pending" | "uploaded" | "cancelled";
   } | null>(null);
+  const [deliveryBusy, setDeliveryBusy] = useState<"upload" | "cancel" | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   useEffect(() => {
     setMeterNo(initialMeterNo);
@@ -150,12 +159,16 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
 
     setSessionIssues((n) => n + 1);
     setLastResult({
+      purchaseId: result.purchaseId,
       tokenFormatted: result.tokenFormatted,
       orderNo: result.orderNo,
       amountKes: result.amountKes,
       meterNo: result.meterNo,
       at: result.createdAt,
+      utility: result.utility,
+      deliveryStatus: "pending",
     });
+    setConfirmingCancel(false);
     toast.success("STS token issued", {
       description: "Saved to the Tokens ledger. Copy and share securely with the customer.",
     });
@@ -176,6 +189,33 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
       toast.message("Copied", { description: "Token copied with dashes." });
     } catch {
       toast.error("Could not copy to clipboard.");
+    }
+  }
+
+  async function actOnDelivery(action: "upload" | "cancel") {
+    if (!lastResult) return;
+    setDeliveryBusy(action);
+    try {
+      const result =
+        action === "upload"
+          ? await uploadPurchasedToken(lastResult.purchaseId)
+          : await cancelPurchasedToken(lastResult.purchaseId);
+      if (result.ok) {
+        setLastResult((prev) => (prev ? { ...prev, deliveryStatus: result.status } : prev));
+        toast.success(
+          result.status === "uploaded" ? "Token delivered to the meter." : "Purchase cancelled."
+        );
+      } else if (result.currentStatus) {
+        setLastResult((prev) => (prev ? { ...prev, deliveryStatus: result.currentStatus! } : prev));
+        toast.message("Already resolved", { description: result.error });
+      } else {
+        toast.error(result.error);
+      }
+    } catch {
+      toast.error("Something went wrong. The token above is still valid — you can retry.");
+    } finally {
+      setDeliveryBusy(null);
+      setConfirmingCancel(false);
     }
   }
 
@@ -360,6 +400,67 @@ export function ManualTokensView({ initialMeterNo = "" }: ManualTokensViewProps)
                         Copy grouped
                       </Button>
                     </div>
+                    {lastResult.utility === "electricity" ? (
+                      <div className="pt-2">
+                        {lastResult.deliveryStatus === "pending" ? (
+                          confirmingCancel ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                Cancel this purchase? No automatic refund.
+                              </span>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                className="rounded-full"
+                                disabled={deliveryBusy !== null}
+                                onClick={() => void actOnDelivery("cancel")}
+                              >
+                                {deliveryBusy === "cancel" ? "Cancelling…" : "Yes, cancel"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full"
+                                disabled={deliveryBusy !== null}
+                                onClick={() => setConfirmingCancel(false)}
+                              >
+                                No, keep it
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="rounded-full"
+                                disabled={deliveryBusy !== null}
+                                onClick={() => void actOnDelivery("upload")}
+                              >
+                                {deliveryBusy === "upload" ? "Uploading…" : "Upload Token"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full"
+                                disabled={deliveryBusy !== null}
+                                onClick={() => setConfirmingCancel(true)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          )
+                        ) : (
+                          <p className="text-xs font-medium text-muted-foreground">
+                            {lastResult.deliveryStatus === "uploaded"
+                              ? "Delivered to meter"
+                              : "Purchase cancelled — no refund is issued automatically"}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">

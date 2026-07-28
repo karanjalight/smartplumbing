@@ -40,7 +40,9 @@ export type MeterConnectivity =
 export type MeterModelType =
   | "water_prepay_m3"
   | "water_prepay_currency"
-  | "postpay";
+  | "postpay"
+  | "electricity_prepay_kwh"
+  | "electricity_prepay_currency";
 export type PaymentMethod = "M-Pesa" | "Bank" | "Cash" | "STS credit" | "Card";
 export type PaymentCategory = "rent" | "tokens" | "service" | "shop";
 export type PaymentStatus =
@@ -51,6 +53,7 @@ export type PaymentStatus =
   | "cancelled";
 export type TokenSource = "app" | "m_pesa" | "manual";
 export type ManualTokenChannel = "office" | "call_center" | "field";
+export type TokenDeliveryStatus = "pending" | "uploaded" | "cancelled";
 export type StaffStatus = "active" | "on_leave" | "inactive";
 export type StaffServes = "tenants" | "landlords" | "both";
 export type StaffSkill =
@@ -236,6 +239,7 @@ export type TenantRow = Timestamps & {
   building_id: string | null;
   unit_id: string | null;
   meter_id: string | null;
+  electricity_meter_id: string | null;
   full_name: string;
   phone: string | null;
   email: string | null;
@@ -294,6 +298,10 @@ export type TokenPurchaseRow = {
   payment_ref: string | null;
   issued_by: string | null;
   note: string | null;
+  delivery_status: TokenDeliveryStatus;
+  delivery_status_at: string | null;
+  delivery_status_by: string | null;
+  delivery_response: Json | null;
   created_at: string;
 }
 
@@ -605,6 +613,20 @@ export type OwnerExpenseRow = Timestamps & {
   created_by: string | null;
 };
 
+export type PaymentCommissionRow = {
+  id: string;
+  payment_id: string;
+  tenant_id: string | null;
+  landlord_id: string;
+  building_id: string | null;
+  gross_kes: number;
+  commission_pct: number;
+  commission_kes: number;
+  net_to_landlord_kes: number;
+  period: string | null;
+  created_at: string;
+};
+
 // ---------- Helper insert/update types -----------------------------------
 
 type Insertable<T> = Omit<T, "created_at" | "updated_at"> & {
@@ -657,7 +679,15 @@ export type Database = {
       water_pricing:      TableDef<WaterPricingRow>;
       meters:             TableDef<MeterRow>;
       tenants:            TableDef<TenantRow>;
-      payments:           TableDef<PaymentRow>;
+      payments: {
+        Row: PaymentRow;
+        Insert: Partial<PaymentRow> & {
+          amount_kes: number;
+          method: PaymentMethod;
+        };
+        Update: Partial<PaymentRow>;
+        Relationships: EmptyRelationships;
+      };
       token_purchases:    LightTableDef<TokenPurchaseRow>;
       payouts:            TableDef<PayoutRow>;
       payout_payments: {
@@ -744,6 +774,15 @@ export type Database = {
         Update: Partial<OwnerExpenseRow>;
         Relationships: EmptyRelationships;
       };
+      payment_commissions: {
+        Row: PaymentCommissionRow;
+        Insert: Omit<PaymentCommissionRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<PaymentCommissionRow>;
+        Relationships: EmptyRelationships;
+      };
     };
     Views: {
       tenant_directory: ViewDef<
@@ -754,6 +793,7 @@ export type Database = {
           building_name: string | null;
           unit_label: string | null;
           meter_no: string | null;
+          electricity_meter_no: string | null;
         }
       >;
       meter_directory: ViewDef<
@@ -792,6 +832,7 @@ export type Database = {
       payment_status: PaymentStatus;
       token_source: TokenSource;
       manual_token_channel: ManualTokenChannel;
+      token_delivery_status: TokenDeliveryStatus;
       staff_status: StaffStatus;
       staff_serves: StaffServes;
       staff_skill: StaffSkill;

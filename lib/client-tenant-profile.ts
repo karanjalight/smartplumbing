@@ -22,6 +22,8 @@ export type ClientTenantProfile = {
   region: string;
   meterNo: string;
   meterTypeLabel: string;
+  electricityMeterNo: string;
+  electricityMeterTypeLabel: string;
   rentKes: number;
   rentLabel: string;
   balanceKes: number;
@@ -47,6 +49,8 @@ export const DEMO_CLIENT_TENANT_PROFILE: ClientTenantProfile = {
   region: "Nairobi County",
   meterNo: "",
   meterTypeLabel: "Prepayment water (m3) - STS",
+  electricityMeterNo: "",
+  electricityMeterTypeLabel: "Prepayment electricity (kWh) - STS",
   rentKes: 15000,
   rentLabel: formatKes(15000),
   balanceKes: 0,
@@ -72,6 +76,15 @@ function meterTypeLabel(modelType: string | null | undefined): string {
   }
 }
 
+function electricityMeterTypeLabel(modelType: string | null | undefined): string {
+  switch (modelType) {
+    case "electricity_prepay_currency":
+      return "Prepayment electricity (KES) - STS";
+    default:
+      return "Prepayment electricity (kWh) - STS";
+  }
+}
+
 export async function fetchCurrentClientTenantProfile(
   client: SupabaseClient<Database>,
 ): Promise<ClientTenantProfile | null> {
@@ -90,7 +103,7 @@ export async function fetchCurrentClientTenantProfile(
   if (error) throw error;
   if (!tenant) return null;
 
-  const [buildingRes, unitRes, meterRes] = await Promise.all([
+  const [buildingRes, unitRes, meterRes, electricityMeterRes] = await Promise.all([
     tenant.building_id
       ? client
           .from("buildings")
@@ -110,6 +123,13 @@ export async function fetchCurrentClientTenantProfile(
           .from("meters")
           .select("meter_no, model_type")
           .eq("id", tenant.meter_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    tenant.electricity_meter_id
+      ? client
+          .from("meters")
+          .select("meter_no, model_type")
+          .eq("id", tenant.electricity_meter_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -142,6 +162,8 @@ export async function fetchCurrentClientTenantProfile(
     region: tenant.region?.trim() || buildingRes.data?.region?.trim() || "Nairobi County",
     meterNo: meterRes.data?.meter_no?.trim() || "",
     meterTypeLabel: meterTypeLabel(meterRes.data?.model_type),
+    electricityMeterNo: electricityMeterRes.data?.meter_no?.trim() || "",
+    electricityMeterTypeLabel: electricityMeterTypeLabel(electricityMeterRes.data?.model_type),
     rentKes,
     rentLabel: rentKes > 0 ? formatKes(rentKes) : "Rent not set",
     balanceKes,

@@ -14,6 +14,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { utilityOfModelType } from "@/lib/meters-data";
 import { cn } from "@/lib/utils";
 
 function RequiredMark() {
@@ -43,9 +44,9 @@ export function OnboardMeterView({
 
   const [supplier, setSupplier] = useState("");
   const [meterId, setMeterId] = useState("");
-  const [meterType, setMeterType] = useState<"water_prepay_m3" | "water_prepay_currency" | "postpay">(
-    "water_prepay_m3"
-  );
+  const [meterType, setMeterType] = useState<
+    "water_prepay_m3" | "water_prepay_currency" | "postpay" | "electricity_prepay_kwh" | "electricity_prepay_currency"
+  >("water_prepay_m3");
   const [installedOn, setInstalledOn] = useState("");
   const [installer, setInstaller] = useState("");
   const [firmware, setFirmware] = useState("");
@@ -77,7 +78,8 @@ export function OnboardMeterView({
     setLongiValidated(false);
     setLongiInfo(null);
 
-    const result = await validateMeterWithLongi(meterId.trim());
+    const utility = utilityOfModelType(meterType);
+    const result = await validateMeterWithLongi(meterId.trim(), utility);
     setValidating(false);
 
     if (!result.ok) {
@@ -248,6 +250,8 @@ export function OnboardMeterView({
               {[
                 { key: "water_prepay_m3" as const, label: "Prepay water (m3)" },
                 { key: "water_prepay_currency" as const, label: "Prepay water (currency)" },
+                { key: "electricity_prepay_kwh" as const, label: "Prepay electricity (kWh)" },
+                { key: "electricity_prepay_currency" as const, label: "Prepay electricity (currency)" },
                 { key: "postpay" as const, label: "Postpay" },
               ].map((opt) => (
                 <label

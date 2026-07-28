@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { getLongiConfigFromEnv, longiVendToken, type LongiVendResult } from "@/lib/longi-vending";
+import {
+  getLongiConfigForUtility,
+  longiVendToken,
+  type LongiUtility,
+  type LongiVendResult,
+} from "@/lib/longi-vending";
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 import { resolveMeterTenantContext } from "@/lib/tokens-data";
@@ -23,32 +29,42 @@ type PaystackVerifyResponse = {
   };
 };
 
-const processedReferences = new Map<string, LongiVendResult>();
+const processedReferences = new Map<string, LongiVendResult & { purchaseId: string | null }>();
 
 export async function POST(request: Request) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  const longiConfig = getLongiConfigFromEnv();
   if (!secretKey) {
     return NextResponse.json(
       { ok: false, error: "PAYSTACK_SECRET_KEY is not configured on the server." },
       { status: 503 }
     );
   }
+
+  let body: { reference?: string; meterNo?: string; amount?: number; utility?: string };
+  try {
+    body = (await request.json()) as {
+      reference?: string;
+      meterNo?: string;
+      amount?: number;
+      utility?: string;
+    };
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const utility: LongiUtility = body.utility === "electricity" ? "electricity" : "water";
+  const longiConfig = getLongiConfigForUtility(utility);
   if (!longiConfig) {
     return NextResponse.json(
       {
         ok: false,
-        error: "LONGi vending is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5.",
+        error:
+          utility === "electricity"
+            ? "Electricity vending is not configured. Set LONGI_ELECTRICITY_USERNAME and LONGI_ELECTRICITY_PASSWORD_MD5."
+            : "LONGi vending is not configured. Set LONGI_USERNAME and LONGI_PASSWORD_MD5.",
       },
       { status: 503 }
     );
-  }
-
-  let body: { reference?: string; meterNo?: string; amount?: number };
-  try {
-    body = (await request.json()) as { reference?: string; meterNo?: string; amount?: number };
-  } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
   const reference = String(body.reference ?? "").trim();
@@ -106,6 +122,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Paid amount is invalid." }, { status: 400 });
   }
 
+  const admin = getSupabaseAdminClient();
+  const { data: meterRow } = await admin
+    .from("meters")
+    .select("model_type")
+    .eq("meter_no", meterNo)
+    .maybeSingle();
+  if (meterRow) {
+    const actualUtility = utilityOfModelType(meterRow.model_type as MeterModelType);
+    if (actualUtility !== utility) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `This meter is a ${actualUtility} meter, but the request specified ${utility}.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const vend = await longiVendToken(longiConfig, { meterNo, amount: amountKes });
   if (!vend.ok) {
     return NextResponse.json(
@@ -118,15 +153,16 @@ export async function POST(request: Request) {
     );
   }
 
-  await persistTokenPurchase({
+  const purchaseId = await persistTokenPurchase({
     reference,
     meterNo,
     amountKes,
     vend,
   });
 
-  processedReferences.set(reference, vend);
-  return NextResponse.json(vend);
+  const responseBody = { ...vend, purchaseId };
+  processedReferences.set(reference, responseBody);
+  return NextResponse.json(responseBody);
 }
 
 async function persistTokenPurchase(input: {
@@ -134,7 +170,7 @@ async function persistTokenPurchase(input: {
   meterNo: string;
   amountKes: number;
   vend: LongiVendResult;
-}) {
+}): Promise<string | null> {
   try {
     const admin = getSupabaseAdminClient();
 
@@ -144,11 +180,11 @@ async function persistTokenPurchase(input: {
       .eq("payment_ref", input.reference)
       .maybeSingle();
 
-    if (existing) return;
+    if (existing) return existing.id;
 
     const ctx = await resolveMeterTenantContext(admin, input.meterNo);
     const tokenFormatted = input.vend.token.trim();
-    if (!tokenFormatted) return;
+    if (!tokenFormatted) return null;
 
     const { data: inserted, error: insErr } = await admin
       .from("token_purchases")
@@ -171,7 +207,7 @@ async function persistTokenPurchase(input: {
       .select("id, created_at")
       .maybeSingle();
 
-    if (insErr || !inserted) return;
+    if (insErr || !inserted) return null;
 
     if (ctx.tenantId) {
       await admin
@@ -182,7 +218,10 @@ async function persistTokenPurchase(input: {
         } as never)
         .eq("id", ctx.tenantId);
     }
+
+    return inserted.id;
   } catch {
     // Vend succeeded; ledger write failure should not block the client response.
+    return null;
   }
 }

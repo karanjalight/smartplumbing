@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import type {
   BuildingRow,
   Database,
@@ -111,6 +112,8 @@ export type AdminUnitListRow = {
   landlordId: string | null;
   occupied: boolean;
   occupantName: string | null;
+  waterMeterNo: string | null;
+  electricityMeterNo: string | null;
 };
 
 /**
@@ -119,14 +122,16 @@ export type AdminUnitListRow = {
  * hand-written `Database` types. Admin RLS returns all rows.
  */
 export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> {
-  const [unitsRes, buildingsRes, tenantsRes] = await Promise.all([
+  const [unitsRes, buildingsRes, tenantsRes, metersRes] = await Promise.all([
     client.from("units").select("*"),
     client.from("buildings").select("*"),
     client.from("tenants").select("*"),
+    client.from("meters").select("*"),
   ]);
   if (unitsRes.error) throw unitsRes.error;
   if (buildingsRes.error) throw buildingsRes.error;
   if (tenantsRes.error) throw tenantsRes.error;
+  if (metersRes.error) throw metersRes.error;
 
   const buildings = new Map<string, BuildingRow>(
     (buildingsRes.data ?? []).map((b) => [b.id, b])
@@ -138,16 +143,27 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
     arr.push(t);
     tenantsByUnit.set(t.unit_id, arr);
   }
+  const metersByUnit = new Map<string, MeterRow[]>();
+  for (const m of metersRes.data ?? []) {
+    if (!m.unit_id) continue;
+    const arr = metersByUnit.get(m.unit_id) ?? [];
+    arr.push(m);
+    metersByUnit.set(m.unit_id, arr);
+  }
 
   const rows: AdminUnitListRow[] = (unitsRes.data ?? []).map((u) => {
     const building = buildings.get(u.building_id) ?? null;
     const unitTenants = tenantsByUnit.get(u.id) ?? [];
-    const activeTenant = unitTenants.find((t) => t.status !== "inactive");
-    const occupied = activeTenant
-      ? true
-      : unitTenants.length === 0
-        ? !u.is_vacant
-        : false;
+    const primaryTenant =
+      unitTenants.find((t) => t.status !== "inactive") ?? unitTenants[0] ?? null;
+    const occupied = unitTenants.length > 0 ? true : !u.is_vacant;
+    const unitMeters = metersByUnit.get(u.id) ?? [];
+    const waterMeter = unitMeters.find(
+      (m) => utilityOfModelType(m.model_type as MeterModelType) === "water"
+    );
+    const electricityMeter = unitMeters.find(
+      (m) => utilityOfModelType(m.model_type as MeterModelType) === "electricity"
+    );
     return {
       id: u.id,
       code: u.code,
@@ -160,7 +176,9 @@ export async function listAllUnits(client: Client): Promise<AdminUnitListRow[]> 
       buildingName: building?.name ?? "—",
       landlordId: building?.landlord_id ?? null,
       occupied,
-      occupantName: activeTenant?.full_name ?? null,
+      occupantName: primaryTenant?.full_name ?? null,
+      waterMeterNo: waterMeter?.meter_no ?? null,
+      electricityMeterNo: electricityMeter?.meter_no ?? null,
     };
   });
 
@@ -309,6 +327,40 @@ export async function listTokenPurchases(
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
+}
+
+export type TokenPurchaseWithMeterRow = TokenPurchaseRow & {
+  meter_model_type: MeterModelType | null;
+  meter_landlord_id: string | null;
+};
+
+/** Single token purchase, joined to its meter's model_type + landlord (for delivery authorization). */
+export async function getTokenPurchaseById(
+  client: Client,
+  id: string
+): Promise<TokenPurchaseWithMeterRow | null> {
+  const { data: purchase, error } = await client
+    .from("token_purchases")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!purchase) return null;
+
+  let meterModelType: MeterModelType | null = null;
+  let meterLandlordId: string | null = null;
+  if (purchase.meter_id) {
+    const { data: meter, error: meterErr } = await client
+      .from("meters")
+      .select("model_type, landlord_id")
+      .eq("id", purchase.meter_id)
+      .maybeSingle();
+    if (meterErr) throw meterErr;
+    meterModelType = (meter?.model_type as MeterModelType) ?? null;
+    meterLandlordId = meter?.landlord_id ?? null;
+  }
+
+  return { ...purchase, meter_model_type: meterModelType, meter_landlord_id: meterLandlordId };
 }
 
 // ---------- Payouts -------------------------------------------------------

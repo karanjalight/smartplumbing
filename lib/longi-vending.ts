@@ -14,16 +14,48 @@ export type ServiceBaseVo = {
   errorMsg?: string | null;
 };
 
-export function getLongiConfigFromEnv(): LongiConfig | null {
-  const username = process.env.LONGI_USERNAME;
-  const passwordMd5 = process.env.LONGI_PASSWORD_MD5;
+export type LongiUtility = "water" | "electricity";
+
+function readLongiConfig(
+  usernameVar: string,
+  passwordVar: string,
+  baseUrlVar: string,
+  baseUrlDefault: string,
+): LongiConfig | null {
+  const username = process.env[usernameVar];
+  const passwordMd5 = process.env[passwordVar];
   if (!username?.trim() || !passwordMd5?.trim()) return null;
-  const raw = process.env.LONGI_VENDING_BASE_URL ?? "http://longimeter.net:21207/vendingservice";
+  const raw = process.env[baseUrlVar] ?? baseUrlDefault;
   return {
     baseUrl: raw.replace(/\/$/, ""),
     username: username.trim(),
     passwordMd5: passwordMd5.trim(),
   };
+}
+
+/** Water LONGi credentials (existing env vars, unchanged). */
+export function getLongiConfigFromEnv(): LongiConfig | null {
+  return readLongiConfig(
+    "LONGI_USERNAME",
+    "LONGI_PASSWORD_MD5",
+    "LONGI_VENDING_BASE_URL",
+    "http://longimeter.net:21207/vendingservice",
+  );
+}
+
+/** Electricity LONGi credentials — separate merchant account from water. */
+export function getLongiConfigForElectricity(): LongiConfig | null {
+  return readLongiConfig(
+    "LONGI_ELECTRICITY_USERNAME",
+    "LONGI_ELECTRICITY_PASSWORD_MD5",
+    "LONGI_ELECTRICITY_BASE_URL",
+    "http://longimeter.net:21207/vendingservice",
+  );
+}
+
+/** Pick the right LONGi credential set for a given utility. */
+export function getLongiConfigForUtility(utility: LongiUtility): LongiConfig | null {
+  return utility === "electricity" ? getLongiConfigForElectricity() : getLongiConfigFromEnv();
 }
 
 const JSON_HEADERS = { Accept: "application/json" } as const;
@@ -55,14 +87,33 @@ function parseLongiBody(
   }
 }
 
-async function fetchLongiText(url: string, method: "GET" | "POST"): Promise<{ status: number; text: string }> {
-  const res = await fetch(url, {
-    method,
-    cache: "no-store",
-    headers: JSON_HEADERS,
-  });
-  const text = await res.text();
-  return { status: res.status, text };
+function longiTimeoutMs(): number {
+  const raw = Number(process.env.LONGI_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 15000;
+}
+
+async function fetchLongiText(
+  url: string,
+  method: "GET" | "POST",
+): Promise<{ status: number; text: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), longiTimeoutMs());
+  try {
+    const res = await fetch(url, {
+      method,
+      cache: "no-store",
+      headers: JSON_HEADERS,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    return { status: res.status, text };
+  } catch {
+    // Timeout or network error → surface as an empty body so parseLongiBody
+    // returns a clean error instead of throwing up through the caller.
+    return { status: 0, text: "" };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sessionIdFromLogin(data: ServiceBaseVo & Record<string, unknown>): string | null {
@@ -227,9 +278,10 @@ export type LongiValidateMeterResult =
     }
   | LongiVendError;
 
-/** Login + GET /validation — used when onboarding a meter. */
-export async function longiValidateMeter(
+/** Validation + result mapping using an EXISTING session (no login). */
+export async function longiValidateMeterWithSession(
   config: LongiConfig,
+  sessionId: string,
   meterNo: string,
 ): Promise<LongiValidateMeterResult> {
   const trimmed = meterNo.trim();
@@ -237,16 +289,7 @@ export async function longiValidateMeter(
     return { ok: false, error: "Meter number is required", errorCode: 9002 };
   }
 
-  const login = await longiLogin(config);
-  if (login.errorCode !== 0 || !login.sessionId) {
-    return {
-      ok: false,
-      error: login.errorMsg || `LONGi login failed (${login.errorCode})`,
-      errorCode: login.errorCode,
-    };
-  }
-
-  const validation = await longiValidation(config, login.sessionId, trimmed);
+  const validation = await longiValidation(config, sessionId, trimmed);
   if (validation.errorCode !== 0) {
     const msg =
       validation.errorMsg ||
@@ -270,11 +313,35 @@ export async function longiValidateMeter(
   };
 }
 
+/** Login + GET /validation — used when onboarding a single meter. */
+export async function longiValidateMeter(
+  config: LongiConfig,
+  meterNo: string,
+): Promise<LongiValidateMeterResult> {
+  const trimmed = meterNo.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Meter number is required", errorCode: 9002 };
+  }
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0 || !login.sessionId) {
+    return {
+      ok: false,
+      error: login.errorMsg || `LONGi login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  return longiValidateMeterWithSession(config, login.sessionId, trimmed);
+}
+
 export function mapLongiMeterTypeToModel(
   meterType: number | undefined,
-): "water_prepay_m3" | "water_prepay_currency" | "postpay" {
+): "water_prepay_m3" | "water_prepay_currency" | "postpay" | "electricity_prepay_kwh" | "electricity_prepay_currency" {
   if (meterType === -1) return "postpay";
-  if (meterType === 4 || meterType === 5) return "water_prepay_currency";
+  if (meterType === 0) return "electricity_prepay_kwh";
+  if (meterType === 4) return "electricity_prepay_currency";
+  if (meterType === 5) return "water_prepay_currency";
   return "water_prepay_m3";
 }
 
@@ -345,6 +412,94 @@ export async function longiVendToken(
     kctToken2: tx.kctToken2,
     subsidyToken: tx.subsidyToken,
   };
+}
+
+/** Chapter 8: void a transaction so it can't be redeemed. */
+export async function longiCancelTransaction(
+  config: LongiConfig,
+  params: { orderNo: string }
+): Promise<{ ok: true; state?: number; raw: ServiceBaseVo & { state?: number } } | LongiVendError> {
+  const orderNo = params.orderNo.trim();
+  if (!orderNo) return { ok: false, error: "Order number is required", errorCode: 9004 };
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0) {
+    return {
+      ok: false,
+      error: login.errorMsg || `Login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  const url = new URL(`${config.baseUrl}/cancellation`);
+  url.searchParams.set("token", login.sessionId);
+  url.searchParams.set("orderNo", orderNo);
+  const { status, text } = await fetchLongiText(url.toString(), "GET");
+  const parsed = parseLongiBody(text, status, "cancellation");
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error, errorCode: -1 };
+  }
+
+  const data = parsed.data as ServiceBaseVo & { state?: number };
+  if (data.errorCode !== 0) {
+    const msg =
+      data.errorMsg ||
+      (data.errorCode === 3006
+        ? "This transaction has already been cancelled."
+        : data.errorCode === 3007
+          ? "This transaction can no longer be cancelled (it may already be redeemed)."
+          : data.errorCode === 3005
+            ? "This order does not exist."
+            : `Cancellation failed (${data.errorCode})`);
+    return { ok: false, error: msg, errorCode: data.errorCode };
+  }
+
+  return {
+    ok: true,
+    state: typeof data.state === "number" ? data.state : undefined,
+    raw: data,
+  };
+}
+
+/** Chapter 13: push the STS token straight to the meter over the network. */
+export async function longiWriteToken(
+  config: LongiConfig,
+  params: { meterNo: string; ststoken: string }
+): Promise<{ ok: true; raw: ServiceBaseVo } | LongiVendError> {
+  const meterNo = params.meterNo.trim();
+  const ststoken = params.ststoken.trim();
+  if (!meterNo) return { ok: false, error: "Meter number is required", errorCode: 9002 };
+  if (!ststoken) return { ok: false, error: "STS token is required", errorCode: 9010 };
+
+  const login = await longiLogin(config);
+  if (login.errorCode !== 0) {
+    return {
+      ok: false,
+      error: login.errorMsg || `Login failed (${login.errorCode})`,
+      errorCode: login.errorCode,
+    };
+  }
+
+  const url = new URL(`${config.baseUrl}/writeToken`);
+  url.searchParams.set("token", login.sessionId);
+  url.searchParams.set("msno", meterNo);
+  url.searchParams.set("ststoken", ststoken);
+  const { status, text } = await fetchLongiText(url.toString(), "GET");
+  const parsed = parseLongiBody(text, status, "writeToken");
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error, errorCode: -1 };
+  }
+
+  const data = parsed.data as ServiceBaseVo;
+  if (data.errorCode !== 0) {
+    return {
+      ok: false,
+      error: data.errorMsg || `Remote token write failed (${data.errorCode})`,
+      errorCode: data.errorCode,
+    };
+  }
+
+  return { ok: true, raw: data };
 }
 
 export function meterTypeLabel(meterType: number): string {

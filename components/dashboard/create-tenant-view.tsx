@@ -35,6 +35,8 @@ import {
   fetchAdminMetersForTenantPicker,
   formatMeterPickerLabel,
   getAdminMetersForTenantPicker,
+  isElectricityMeter,
+  isWaterMeter,
   type MeterRow,
 } from "@/lib/meters-data";
 import {
@@ -132,6 +134,7 @@ export function CreateTenantView({
   const [notes, setNotes] = useState("");
   const [selectedMeterId, setSelectedMeterId] = useState("");
   const [meterOverride, setMeterOverride] = useState(false);
+  const [selectedElectricityMeterId, setSelectedElectricityMeterId] = useState("");
 
   const [landlordMenuOpen, setLandlordMenuOpen] = useState(false);
   const [landlordQuery, setLandlordQuery] = useState("");
@@ -226,6 +229,16 @@ export function CreateTenantView({
     if (isLandlordPortal) return landlordLiveMeters;
     return adminMeterRows;
   }, [isLandlordPortal, adminMeterRows, landlordLiveMeters]);
+
+  const waterMeterPickerRows = useMemo(
+    (): MeterRow[] => meterPickerRows.filter(isWaterMeter),
+    [meterPickerRows]
+  );
+
+  const electricityMeterPickerRows = useMemo(
+    (): MeterRow[] => meterPickerRows.filter(isElectricityMeter),
+    [meterPickerRows]
+  );
 
   const landlordsFiltered = useMemo(() => {
     const q = landlordQuery.trim().toLowerCase();
@@ -686,6 +699,7 @@ export function CreateTenantView({
           buildingId: userBuildingId,
           unitId: hid,
           meterNo: meterNoForApi,
+          electricityMeterNo: selectedElectricityMeterId.trim() || undefined,
           leaseStart,
           leaseEnd: leaseEnd.trim() || undefined,
           nationalId: nationalId.trim() || undefined,
@@ -760,6 +774,7 @@ export function CreateTenantView({
         buildingId: adminUserBuildingId || undefined,
         unitId: adminHouseUnitId || undefined,
         meterNo: meterNoForApi,
+        electricityMeterNo: selectedElectricityMeterId.trim() || undefined,
         leaseStart,
         leaseEnd: leaseEnd.trim() || undefined,
         nationalId: nationalId.trim() || undefined,
@@ -1129,6 +1144,7 @@ export function CreateTenantView({
                                 setAdminUserBuildingId("");
                                 setAdminHouseUnitId("");
                                 setSelectedMeterId("");
+                                setSelectedElectricityMeterId("");
                                 setLandlordMenuOpen(false);
                                 setLandlordQuery("");
                               }}
@@ -1187,6 +1203,7 @@ export function CreateTenantView({
                             setUserBuildingId(e.target.value);
                             setHouseUnitId("");
                             setSelectedMeterId("");
+                            setSelectedElectricityMeterId("");
                             setMeterOverride(false);
                           }}
                           className={cn(selectClass, "pl-10 pr-10 appearance-none")}
@@ -1277,6 +1294,7 @@ export function CreateTenantView({
                             setAdminHouseUnitId("");
                             setLandlordUnitFree("");
                             setSelectedMeterId("");
+                            setSelectedElectricityMeterId("");
                             setMeterOverride(false);
                           }}
                           disabled={adminBuildingsLoading}
@@ -1402,7 +1420,7 @@ export function CreateTenantView({
                   </Label>
                   {metersLoading ? (
                     <p className="text-sm text-muted-foreground">Loading meters…</p>
-                  ) : meterPickerRows.length === 0 ? (
+                  ) : waterMeterPickerRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       No meters in inventory.{" "}
                       <Link
@@ -1433,7 +1451,7 @@ export function CreateTenantView({
                             ? "No meter — assign later"
                             : "Use unit default / assign later (demo serial)"}
                         </option>
-                        {meterPickerRows.map((m) => (
+                        {waterMeterPickerRows.map((m) => (
                           <option key={m.meterId} value={m.meterId}>
                             {formatMeterPickerLabel(m)}
                           </option>
@@ -1447,6 +1465,51 @@ export function CreateTenantView({
                   )}
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="electricityMeterPick" className="text-foreground">
+                  Electricity meter{" "}
+                  <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                {metersLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading meters…</p>
+                ) : electricityMeterPickerRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No electricity meters in inventory.{" "}
+                    <Link
+                      href={
+                        isLandlordPortal
+                          ? "/landlords/dashboard/meters"
+                          : "/dashboard/meters/onboard"
+                      }
+                      className="font-medium text-[#0A4266] underline dark:text-[#6BB4E8]"
+                    >
+                      Onboard a meter
+                    </Link>{" "}
+                    first.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      id="electricityMeterPick"
+                      value={selectedElectricityMeterId}
+                      onChange={(e) => setSelectedElectricityMeterId(e.target.value)}
+                      className={cn(selectClass, "font-mono text-xs sm:text-sm")}
+                    >
+                      <option value="">No electricity meter — assign later</option>
+                      {electricityMeterPickerRows.map((m) => (
+                        <option key={m.meterId} value={m.meterId}>
+                          {formatMeterPickerLabel(m)}
+                        </option>
+                      ))}
+                    </select>
+                    <FieldDescription>
+                      Electricity meters onboarded to this landlord. Independent of the
+                      water meter above — a tenant can have either, both, or neither.
+                    </FieldDescription>
+                  </>
+                )}
+              </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">

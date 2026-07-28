@@ -19,20 +19,28 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { amount?: number; meterNo?: string; email?: string; customerName?: string };
+  let body: {
+    amount?: number; meterNo?: string; email?: string; customerName?: string;
+    purpose?: "rent" | "water-token-purchase"; tenantId?: string;
+  };
   try {
-    body = (await request.json()) as { amount?: number; meterNo?: string; email?: string; customerName?: string };
+    body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
+  const purpose = body.purpose === "rent" ? "rent" : "water-token-purchase";
   const amountKes = Number(body.amount);
   const meterNo = String(body.meterNo ?? "").trim();
+  const tenantId = String(body.tenantId ?? "").trim();
   const email = String(body.email ?? "client@smartone.app").trim().toLowerCase();
   const customerName = String(body.customerName ?? "").trim();
 
-  if (!meterNo) {
+  if (purpose === "water-token-purchase" && !meterNo) {
     return NextResponse.json({ ok: false, error: "Meter number is required" }, { status: 400 });
+  }
+  if (purpose === "rent" && !tenantId) {
+    return NextResponse.json({ ok: false, error: "Tenant is required for rent payment" }, { status: 400 });
   }
   if (!Number.isFinite(amountKes) || amountKes <= 0) {
     return NextResponse.json({ ok: false, error: "Amount must be greater than zero" }, { status: 400 });
@@ -41,17 +49,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "A valid email address is required" }, { status: 400 });
   }
 
-  const reference = `smartone-${Date.now()}-${meterNo.slice(-5)}`;
+  const refSuffix = purpose === "rent" ? tenantId.slice(-6) : meterNo.slice(-5);
+  const reference = `smartone-${purpose === "rent" ? "rent" : "token"}-${Date.now()}-${refSuffix}`;
   const payload = {
     email,
     amount: Math.round(amountKes * 100),
     currency: "KES",
     reference,
     metadata: {
-      meterNo,
+      purpose,
       amountKes,
       customerName,
-      purpose: "water-token-purchase",
+      ...(purpose === "rent" ? { tenantId } : { meterNo }),
     },
   };
 

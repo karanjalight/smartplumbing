@@ -13,7 +13,12 @@ import { listMeterDirectory } from "@/lib/supabase/queries";
 
 export type MeterLifecycleStatus = "active" | "inactive" | "fault" | "maintenance";
 export type MeterConnectivity = "online" | "offline" | "intermittent" | "unknown";
-export type MeterModelType = "water_prepay_m3" | "water_prepay_currency" | "postpay";
+export type MeterModelType =
+  | "water_prepay_m3"
+  | "water_prepay_currency"
+  | "postpay"
+  | "electricity_prepay_kwh"
+  | "electricity_prepay_currency";
 
 export type MeterDirectoryDbRow = Database["public"]["Views"]["meter_directory"]["Row"];
 
@@ -126,7 +131,24 @@ const META_OVERRIDES: Record<string, Partial<MeterMeta>> = {
 export function meterTypeLabel(modelType: MeterModelType): string {
   if (modelType === "water_prepay_m3") return "Prepay water (m3)";
   if (modelType === "water_prepay_currency") return "Prepay water (currency)";
+  if (modelType === "electricity_prepay_kwh") return "Prepay electricity (kWh)";
+  if (modelType === "electricity_prepay_currency") return "Prepay electricity (currency)";
   return "Postpay";
+}
+
+export type MeterUtility = "water" | "electricity";
+
+/** Water vs. electricity, derived from model_type (postpay buckets as water — no electricity postpay type exists today). */
+export function utilityOfModelType(modelType: MeterModelType): MeterUtility {
+  return modelType.startsWith("electricity_") ? "electricity" : "water";
+}
+
+export function isElectricityMeter(row: { modelType: MeterModelType }): boolean {
+  return utilityOfModelType(row.modelType) === "electricity";
+}
+
+export function isWaterMeter(row: { modelType: MeterModelType }): boolean {
+  return utilityOfModelType(row.modelType) === "water";
 }
 
 /** Map `meter_directory` view row to the dashboard `MeterRow` shape. */

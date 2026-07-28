@@ -10,7 +10,9 @@ import Link from "next/link";
 
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
+import { LeaseSignPrompt } from "@/components/client/lease-sign-prompt";
 import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import type { LeaseRow } from "@/lib/supabase/types";
 
 const DASHBOARD_ACTIONS = [
   {
@@ -41,8 +43,10 @@ const DASHBOARD_ACTIONS = [
 
 export function ClientDashboardView({
   profile,
+  leasePrompt = null,
 }: {
   profile: ClientTenantProfile;
+  leasePrompt?: { lease: LeaseRow; tenantSigned: boolean } | null;
 }) {
   const firstName = profile.name.trim().split(/\s+/)[0] || "there";
 
@@ -50,6 +54,13 @@ export function ClientDashboardView({
     <main className="min-h-screen dark:bg-slate-950">
       <section className="relative mx-auto w-full max-w-sm overflow-hidden rounded-[2rem]  bg-white px-4 pt-6 pb-24 dark:border-slate-800 dark:bg-slate-950">
         <ClientMobileTopbar title="Home" />
+
+        {leasePrompt ? (
+          <LeaseSignPrompt
+            lease={leasePrompt.lease}
+            tenantSigned={leasePrompt.tenantSigned}
+          />
+        ) : null}
 
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-[#123C74] dark:text-[#9FC2FF]">

@@ -5,9 +5,11 @@ import {
   ChevronRight,
   DoorClosed,
   DoorOpen,
+  Droplets,
   LayoutGrid,
   List,
   Search,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -53,6 +55,34 @@ function TypeBadge({ type }: { type: UnitType | null }) {
   );
 }
 
+function MeterBadges({
+  waterMeterNo,
+  electricityMeterNo,
+}: {
+  waterMeterNo: string | null;
+  electricityMeterNo: string | null;
+}) {
+  if (!waterMeterNo && !electricityMeterNo) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      {waterMeterNo ? (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400">
+          <Droplets className="size-3" aria-hidden />
+          <span className="font-mono">{waterMeterNo}</span>
+        </span>
+      ) : null}
+      {electricityMeterNo ? (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <Zap className="size-3" aria-hidden />
+          <span className="font-mono">{electricityMeterNo}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function StatCard({
   icon: Icon,
   label,
@@ -76,13 +106,14 @@ function StatCard({
 function UnitsTable({ rows }: { rows: AdminUnitListRow[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-sm">
+      <table className="w-full min-w-[880px] text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <th className="px-5 py-3">Unit</th>
             <th className="px-5 py-3">Type</th>
             <th className="px-5 py-3">Building</th>
             <th className="px-5 py-3">Status</th>
+            <th className="px-5 py-3">Meters</th>
             <th className="px-5 py-3">Rent</th>
           </tr>
         </thead>
@@ -134,6 +165,12 @@ function UnitsTable({ rows }: { rows: AdminUnitListRow[] }) {
                     Vacant
                   </span>
                 )}
+              </td>
+              <td className="px-5 py-3.5">
+                <MeterBadges
+                  waterMeterNo={u.waterMeterNo}
+                  electricityMeterNo={u.electricityMeterNo}
+                />
               </td>
               <td className="px-5 py-3.5 tabular-nums text-foreground">
                 {u.effectiveRentKes != null ? (

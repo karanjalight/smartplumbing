@@ -8,6 +8,7 @@ import {
   Droplets,
   Loader2,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -15,12 +16,21 @@ import { toast } from "sonner";
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
 import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import { getAvailablePaymentTypes, type PaymentType } from "@/lib/payment-types";
+import { formatKes } from "@/lib/tenants-data";
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 5000, 10000];
 const KES_PER_TOKEN = 150;
 const LITRES_PER_TOKEN = 1000;
 
+const PAYMENT_TAB_CONFIG: Array<{ type: PaymentType; icon: typeof Droplets; label: string }> = [
+  { type: "water", icon: Droplets, label: "Buy Tokens" },
+  { type: "electricity", icon: Zap, label: "Buy Electricity" },
+  { type: "rent", icon: Building2, label: "Pay Rent" },
+];
+
 type PurchaseOk = {
+  id: string | null;
   orderNo: string;
   meterNo: string;
   customerName?: string;
@@ -30,6 +40,12 @@ type PurchaseOk = {
   kctToken1?: string;
   kctToken2?: string;
   subsidyToken?: string | null;
+  deliveryStatus: "pending" | "uploaded" | "cancelled";
+};
+
+type RentResult = {
+  balance: number;
+  balanceLabel: string;
 };
 
 declare global {
@@ -48,6 +64,7 @@ declare global {
             variable_name?: string;
             value?: string;
           }>;
+          utility?: string;
         };
         onClose?: () => void;
         callback?: (response: { reference: string }) => void;
@@ -96,17 +113,40 @@ export function ClientPaymentsView({
 }: {
   profile: ClientTenantProfile;
 }) {
-  const [paymentType, setPaymentType] = useState<"water" | "rent">("water");
+  const availableTypes = getAvailablePaymentTypes(profile);
+  const [paymentType, setPaymentType] = useState<PaymentType>(() => availableTypes[0]);
   const [amountInput, setAmountInput] = useState<string>("1000");
+  const [electricityAmountInput, setElectricityAmountInput] = useState<string>("1000");
+  const [rentAmountInput, setRentAmountInput] = useState<string>(() =>
+    String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes)
+  );
   const [purchaseResult, setPurchaseResult] = useState<PurchaseOk | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  const [purchasingElectricity, setPurchasingElectricity] = useState(false);
+  const [payingRent, setPayingRent] = useState(false);
+  const [rentResult, setRentResult] = useState<RentResult | null>(null);
+  const [deliveryBusy, setDeliveryBusy] = useState<"upload" | "cancel" | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const payerEmail = profile.email.includes("@") ? profile.email : "client@smartone.app";
   const meterNo = profile.meterNo.trim();
+  const electricityMeterNo = profile.electricityMeterNo.trim();
 
   const derived = useMemo(() => {
     if (paymentType === "rent") {
+      const parsedAmount = Number(rentAmountInput);
+      const amountKes = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
       return {
-        amountKes: profile.rentKes,
+        amountKes,
+        tokens: 0,
+        litres: 0,
+      };
+    }
+
+    if (paymentType === "electricity") {
+      const parsedAmount = Number(electricityAmountInput);
+      const amountKes = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
+      return {
+        amountKes,
         tokens: 0,
         litres: 0,
       };
@@ -120,9 +160,14 @@ export function ClientPaymentsView({
       tokens,
       litres: tokens * LITRES_PER_TOKEN,
     };
-  }, [paymentType, amountInput, profile.rentKes]);
+  }, [paymentType, amountInput, rentAmountInput, electricityAmountInput]);
 
-  async function verifyAndVend(reference: string, meter: string, amountKes: number) {
+  async function verifyAndVend(
+    reference: string,
+    meter: string,
+    amountKes: number,
+    utility: "water" | "electricity",
+  ) {
     try {
       const verifyRes = await fetch("/api/paystack/verify-vend", {
         method: "POST",
@@ -131,11 +176,13 @@ export function ClientPaymentsView({
           reference,
           meterNo: meter,
           amount: amountKes,
+          utility,
         }),
       });
       const data = (await verifyRes.json()) as {
         ok?: boolean;
         error?: string;
+        purchaseId?: string | null;
         orderNo?: string;
         meterNo?: string;
         customerName?: string;
@@ -151,6 +198,7 @@ export function ClientPaymentsView({
         return;
       }
       setPurchaseResult({
+        id: data.purchaseId ?? null,
         orderNo: data.orderNo ?? "",
         meterNo: data.meterNo ?? meter,
         customerName: data.customerName,
@@ -160,12 +208,54 @@ export function ClientPaymentsView({
         kctToken1: data.kctToken1,
         kctToken2: data.kctToken2,
         subsidyToken: data.subsidyToken,
+        deliveryStatus: "pending",
       });
       toast.success("Payment confirmed. Token generated.");
     } catch {
       toast.error("Payment succeeded, but verification failed. Contact support with your reference.");
     } finally {
-      setPurchasing(false);
+      if (utility === "electricity") {
+        setPurchasingElectricity(false);
+      } else {
+        setPurchasing(false);
+      }
+    }
+  }
+
+  async function actOnDelivery(action: "upload" | "cancel") {
+    if (!purchaseResult?.id) {
+      toast.error("This purchase has no saved record to act on yet.");
+      return;
+    }
+    setDeliveryBusy(action);
+    try {
+      const res = await fetch(`/api/token-purchases/${purchaseResult.id}/deliver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        status?: "uploaded" | "cancelled";
+        error?: string;
+        currentStatus?: "pending" | "uploaded" | "cancelled";
+      };
+      if (data.ok && data.status) {
+        setPurchaseResult((prev) => (prev ? { ...prev, deliveryStatus: data.status! } : prev));
+        toast.success(
+          data.status === "uploaded" ? "Token delivered to the meter." : "Purchase cancelled."
+        );
+      } else if (data.currentStatus) {
+        setPurchaseResult((prev) => (prev ? { ...prev, deliveryStatus: data.currentStatus! } : prev));
+        toast.message("Already resolved", { description: data.error });
+      } else {
+        toast.error(data.error || "That action could not be completed.");
+      }
+    } catch {
+      toast.error("Network error. The token above is still valid — you can retry.");
+    } finally {
+      setDeliveryBusy(null);
+      setConfirmingCancel(false);
     }
   }
 
@@ -227,7 +317,7 @@ export function ClientPaymentsView({
           setPurchasing(false);
         },
         callback: (response) => {
-          void verifyAndVend(response.reference, meterNo, amountKes);
+          void verifyAndVend(response.reference, meterNo, amountKes, "water");
         },
       }).openIframe();
     } catch (error: unknown) {
@@ -238,6 +328,180 @@ export function ClientPaymentsView({
       }
       toast.error(`Could not start payment: ${getErrorMessage(error)}`);
       setPurchasing(false);
+    }
+  }
+
+  async function handlePurchaseElectricity() {
+    if (!electricityMeterNo) {
+      toast.error("No electricity meter is linked to your account. Contact your landlord.");
+      return;
+    }
+    if (derived.amountKes <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+    if (!paystackPublicKey) {
+      toast.error("Paystack public key is missing. Set NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY.");
+      return;
+    }
+    if (!payerEmail.trim() || !payerEmail.includes("@")) {
+      toast.error("Enter a valid email address for payment.");
+      return;
+    }
+
+    setPurchasingElectricity(true);
+    setPurchaseResult(null);
+    try {
+      const reference = `smartone-elec-${Date.now()}-${electricityMeterNo.slice(-5)}`;
+      const amountKes = Number(derived.amountKes.toFixed(2));
+
+      await ensurePaystackLoaded();
+      if (!window.PaystackPop) {
+        toast.error("Paystack modal is unavailable. Disable blockers and try again.");
+        setPurchasingElectricity(false);
+        return;
+      }
+
+      const commonMetadata = {
+        custom_fields: [
+          { display_name: "Meter No", variable_name: "meter_no", value: electricityMeterNo },
+          { display_name: "Customer", variable_name: "customer_name", value: profile.name },
+          { display_name: "House", variable_name: "house", value: profile.houseLabel },
+        ],
+        utility: "electricity",
+      };
+
+      const paystackPop = window.PaystackPop;
+      if (!paystackPop?.setup) {
+        toast.error("Paystack popup setup is unavailable. Refresh and try again.");
+        setPurchasingElectricity(false);
+        return;
+      }
+      paystackPop.setup({
+        key: paystackPublicKey,
+        email: payerEmail,
+        amount: Math.round(amountKes * 100),
+        currency: "KES",
+        ref: reference,
+        metadata: commonMetadata,
+        onClose: () => {
+          toast.message("Payment window closed.");
+          setPurchasingElectricity(false);
+        },
+        callback: (response) => {
+          void verifyAndVend(response.reference, electricityMeterNo, amountKes, "electricity");
+        },
+      }).openIframe();
+    } catch (error: unknown) {
+      if (error instanceof Error && /Paystack script failed to load/i.test(error.message)) {
+        toast.error("Could not load Paystack modal. Check internet/ad-blocker and try again.");
+        setPurchasingElectricity(false);
+        return;
+      }
+      toast.error(`Could not start payment: ${getErrorMessage(error)}`);
+      setPurchasingElectricity(false);
+    }
+  }
+
+  async function verifyRent(reference: string) {
+    try {
+      const verifyRes = await fetch("/api/paystack/verify-rent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reference,
+          tenantId: profile.tenantId,
+        }),
+      });
+      const data = (await verifyRes.json()) as {
+        ok?: boolean;
+        error?: string;
+        balance?: number;
+      };
+      if (!verifyRes.ok || !data.ok) {
+        toast.error(data.error || `Payment verification failed (${verifyRes.status})`);
+        return;
+      }
+      const balance = typeof data.balance === "number" ? data.balance : 0;
+      setRentResult({ balance, balanceLabel: formatKes(balance) });
+      toast.success("Rent payment confirmed.");
+    } catch {
+      toast.error("Payment succeeded, but verification failed. Contact support with your reference.");
+    } finally {
+      setPayingRent(false);
+    }
+  }
+
+  async function handlePayRent() {
+    if (!profile.tenantId) {
+      toast.error("No tenant is linked to your account. Contact your landlord.");
+      return;
+    }
+    if (derived.amountKes <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+    if (!paystackPublicKey) {
+      toast.error("Paystack public key is missing. Set NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY.");
+      return;
+    }
+    if (!payerEmail.trim() || !payerEmail.includes("@")) {
+      toast.error("Enter a valid email address for payment.");
+      return;
+    }
+
+    setPayingRent(true);
+    setRentResult(null);
+    try {
+      const reference = `smartone-rent-${Date.now()}-${(profile.tenantId ?? "").slice(-6)}`;
+      const amountKes = Number(derived.amountKes.toFixed(2));
+
+      await ensurePaystackLoaded();
+      if (!window.PaystackPop) {
+        toast.error("Paystack modal is unavailable. Disable blockers and try again.");
+        setPayingRent(false);
+        return;
+      }
+
+      const commonMetadata = {
+        custom_fields: [
+          { display_name: "Customer", variable_name: "customer_name", value: profile.name },
+          { display_name: "House", variable_name: "house", value: profile.houseLabel },
+          { display_name: "Purpose", variable_name: "purpose", value: "rent" },
+        ],
+      };
+
+      const paystackPop = window.PaystackPop;
+      if (!paystackPop?.setup) {
+        toast.error("Paystack popup setup is unavailable. Refresh and try again.");
+        setPayingRent(false);
+        return;
+      }
+      paystackPop.setup({
+        key: paystackPublicKey,
+        email: payerEmail,
+        amount: Math.round(amountKes * 100),
+        currency: "KES",
+        ref: reference,
+        metadata: commonMetadata,
+        onClose: () => {
+          toast.message("Payment window closed.");
+          setPayingRent(false);
+        },
+        callback: (response) => {
+          void verifyRent(response.reference);
+        },
+      }).openIframe();
+    } catch (error: unknown) {
+      if (error instanceof Error && /Paystack script failed to load/i.test(error.message)) {
+        toast.error("Could not load Paystack modal. Check internet/ad-blocker and try again.");
+        setPayingRent(false);
+        return;
+      }
+      toast.error(`Could not start payment: ${getErrorMessage(error)}`);
+      setPayingRent(false);
     }
   }
 
@@ -265,48 +529,39 @@ export function ClientPaymentsView({
           </p>
 
           <div className="mt-5 flex gap-2 rounded-2xl bg-white/10 p-1.5">
-            <label className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="payment-type"
-                className="sr-only"
-                checked={paymentType === "water"}
-                onChange={() => setPaymentType("water")}
-              />
-              <span
-                className={
-                  paymentType === "water"
-                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
-                    : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
-                }
-              >
-                <Droplets className="size-4" aria-hidden />
-                Buy Tokens
-              </span>
-            </label>
-
-            <label className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="payment-type"
-                className="sr-only"
-                checked={paymentType === "rent"}
-                onChange={() => {
-                  setPaymentType("rent");
-                  setPurchaseResult(null);
-                }}
-              />
-              <span
-                className={
-                  paymentType === "rent"
-                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
-                    : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
-                }
-              >
-                <Building2 className="size-4" aria-hidden />
-                Pay Rent
-              </span>
-            </label>
+            {PAYMENT_TAB_CONFIG.filter((tab) => availableTypes.includes(tab.type)).map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <label key={tab.type} className="flex-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="payment-type"
+                    className="sr-only"
+                    checked={paymentType === tab.type}
+                    onChange={() => {
+                      setPaymentType(tab.type);
+                      setPurchaseResult(null);
+                      setRentResult(null);
+                      if (tab.type === "rent") {
+                        setRentAmountInput(
+                          String(profile.balanceKes > 0 ? profile.balanceKes : profile.rentKes)
+                        );
+                      }
+                    }}
+                  />
+                  <span
+                    className={
+                      paymentType === tab.type
+                        ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-semibold text-[#0A4266]"
+                        : "flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/75"
+                    }
+                  >
+                    <Icon className="size-4" aria-hidden />
+                    {tab.label}
+                  </span>
+                </label>
+              );
+            })}
           </div>
 
           <div className="mt-5 rounded-2xl border border-white/15 bg-white/10 p-4">
@@ -314,7 +569,7 @@ export function ClientPaymentsView({
               <p className="text-xs text-white/70">Amount to pay</p>
               <CalendarDays className="size-4 text-white/70" aria-hidden />
             </div>
-            {paymentType === "water" && purchaseResult ? (
+            {(paymentType === "water" || paymentType === "electricity") && purchaseResult ? (
               <div className="mt-2">
                 <p className="text-xs text-white/75">Purchased token</p>
                 <p className="mt-1 break-all font-mono text-lg font-semibold tracking-tight">
@@ -330,6 +585,60 @@ export function ClientPaymentsView({
                     Copy token
                   </button>
                 </div>
+                {paymentType === "electricity" ? (
+                  <div className="mt-3">
+                    {purchaseResult.deliveryStatus === "pending" ? (
+                      confirmingCancel ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-white/80">
+                            Cancel this purchase? You won&apos;t be refunded automatically.
+                          </span>
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => void actOnDelivery("cancel")}
+                            className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            {deliveryBusy === "cancel" ? "Cancelling…" : "Yes, cancel"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => setConfirmingCancel(false)}
+                            className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            No, keep it
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => void actOnDelivery("upload")}
+                            className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-[#0A4266] disabled:opacity-50"
+                          >
+                            {deliveryBusy === "upload" ? "Uploading…" : "Upload Token"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => setConfirmingCancel(true)}
+                            className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <p className="text-xs font-medium text-white/85">
+                        {purchaseResult.deliveryStatus === "uploaded"
+                          ? "Delivered to meter"
+                          : "Purchase cancelled — no refund is issued automatically"}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : paymentType === "water" ? (
               <div className="mt-2">
@@ -350,13 +659,47 @@ export function ClientPaymentsView({
                   />
                 </div>
               </div>
+            ) : paymentType === "electricity" ? (
+              <div className="mt-2">
+                <label className="sr-only" htmlFor="electricity-amount-to-pay">
+                  Electricity amount to pay in Kenya shillings
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-semibold">KSh</span>
+                  <input
+                    id="electricity-amount-to-pay"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={electricityAmountInput}
+                    onChange={(e) => setElectricityAmountInput(e.target.value)}
+                    className="w-full border-b border-white/30 bg-transparent py-1 text-3xl font-semibold tracking-tight outline-none placeholder:text-white/50"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             ) : (
-              <p className="mt-2 text-3xl font-semibold tracking-tight">
-                KSh {derived.amountKes.toLocaleString()}
-              </p>
+              <div className="mt-2">
+                <label className="sr-only" htmlFor="rent-amount-to-pay">
+                  Rent amount to pay in Kenya shillings
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-semibold">KSh</span>
+                  <input
+                    id="rent-amount-to-pay"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={rentAmountInput}
+                    onChange={(e) => setRentAmountInput(e.target.value)}
+                    className="w-full border-b border-white/30 bg-transparent py-1 text-3xl font-semibold tracking-tight outline-none placeholder:text-white/50"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             )}
 
-            {paymentType === "water" && purchaseResult ? (
+            {(paymentType === "water" || paymentType === "electricity") && purchaseResult ? (
               <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
                 <p className="text-white/65">Transaction details</p>
                 <p className="mt-1 text-sm font-semibold">Order: {purchaseResult.orderNo}</p>
@@ -376,6 +719,16 @@ export function ClientPaymentsView({
                     {derived.litres.toLocaleString()}
                   </p>
                 </div>
+              </div>
+            ) : paymentType === "electricity" ? (
+              <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
+                <p className="text-white/65">Electricity meter</p>
+                <p className="mt-1 text-base font-semibold">{electricityMeterNo || "—"}</p>
+              </div>
+            ) : rentResult ? (
+              <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
+                <p className="text-white/65">New balance</p>
+                <p className="mt-1 text-base font-semibold">{rentResult.balanceLabel}</p>
               </div>
             ) : (
               <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-xs">
@@ -432,6 +785,48 @@ export function ClientPaymentsView({
                 </p>
               </div>
             </div>
+          ) : paymentType === "electricity" ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Your electricity meter
+                </p>
+                {electricityMeterNo ? (
+                  <p className="mt-2 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {electricityMeterNo}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    No electricity meter linked yet. Contact your landlord to assign one.
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {profile.houseLabel} · {profile.propertyName}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Quick select amount
+                </p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {PRESET_AMOUNTS.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setElectricityAmountInput(String(amount))}
+                      className={
+                        Number(electricityAmountInput) === amount
+                          ? "rounded-xl bg-[#0A4266] px-2 py-2 text-xs font-semibold text-white"
+                          : "rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      }
+                    >
+                      KSh {amount.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800">
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Rent details</p>
@@ -443,24 +838,50 @@ export function ClientPaymentsView({
                   Monthly rent: <span className="font-semibold">{profile.rentLabel}</span>
                 </p>
                 <p>
+                  Outstanding balance: <span className="font-semibold">{profile.balanceLabel}</span>
+                </p>
+                <p>
                   Property: <span className="font-semibold">{profile.propertyName}</span>
                 </p>
               </div>
+              {!profile.tenantId ? (
+                <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                  No tenant is linked to your account. Contact your landlord.
+                </p>
+              ) : null}
             </div>
           )}
 
           <button
             type="button"
-            onClick={paymentType === "water" ? handlePurchaseTokens : () => toast.message("Rent checkout will use your tenant profile rent.")}
-            disabled={paymentType === "water" ? purchasing || !meterNo : false}
+            onClick={
+              paymentType === "water"
+                ? handlePurchaseTokens
+                : paymentType === "electricity"
+                  ? handlePurchaseElectricity
+                  : handlePayRent
+            }
+            disabled={
+              paymentType === "water"
+                ? purchasing || !meterNo
+                : paymentType === "electricity"
+                  ? purchasingElectricity || !electricityMeterNo
+                  : payingRent || !profile.tenantId || derived.amountKes <= 0
+            }
             className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0A4266] text-sm font-semibold text-white shadow-lg shadow-[#0A4266]/30 transition hover:bg-[#083d5c] disabled:opacity-50"
           >
-            {paymentType === "water" && purchasing ? (
+            {(paymentType === "water" && purchasing) ||
+            (paymentType === "electricity" && purchasingElectricity) ||
+            (paymentType === "rent" && payingRent) ? (
               <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
             ) : (
               <Wallet className="mr-2 size-4" aria-hidden />
             )}
-            {paymentType === "water" ? "Pay for tokens" : "Pay rent"}
+            {paymentType === "water"
+              ? "Pay for tokens"
+              : paymentType === "electricity"
+                ? "Pay for electricity"
+                : "Pay rent"}
           </button>
 
           <p className="mt-3 inline-flex w-full items-center justify-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">

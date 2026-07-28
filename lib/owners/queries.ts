@@ -24,33 +24,25 @@ export type OwnerStatementBundle = {
 
 /**
  * Builds an owner statement for a landlord and period from live data:
- * collected payments (per-building fee), billed rent, and logged expenses.
+ * collected payments (recorded commission split), billed rent, and logged expenses.
  */
 export async function assembleOwnerStatement(
   client: Client, landlordId: string, period: string
 ): Promise<OwnerStatementBundle> {
   const { start, end } = monthRange(period);
 
-  // Map each tenant to its building's management-fee %.
-  const [{ data: tenants }, { data: buildings }] = await Promise.all([
-    client.from("tenants").select("id, building_id").eq("landlord_id", landlordId),
-    client.from("buildings").select("id, management_fee_pct").eq("landlord_id", landlordId),
-  ]);
-  const buildingFee = new Map<string, number>();
-  for (const b of buildings ?? []) buildingFee.set(b.id, Number(b.management_fee_pct ?? 0));
-  const tenantFee = new Map<string, number>();
-  for (const t of tenants ?? []) {
-    tenantFee.set(t.id, t.building_id ? buildingFee.get(t.building_id) ?? 0 : 0);
-  }
-
-  // Payments collected within the month (credits).
-  const { data: payments } = await client
-    .from("ledger_entries").select("tenant_id, amount_kes")
-    .eq("landlord_id", landlordId).eq("direction", "credit").eq("voided", false)
+  // Recorded commission splits for payments in the month (source of truth).
+  const { data: commissions } = await client
+    .from("payment_commissions").select("gross_kes, commission_kes, net_to_landlord_kes")
+    .eq("landlord_id", landlordId)
     .gte("created_at", `${start}T00:00:00Z`).lte("created_at", `${end}T23:59:59Z`);
-  const collected: CollectedLine[] = (payments ?? []).map((p) => ({
-    amount: Number(p.amount_kes),
-    feePct: tenantFee.get(p.tenant_id) ?? 0,
+  const collected: CollectedLine[] = (commissions ?? []).map((c) => ({
+    amount: Number(c.gross_kes),
+    // Encode the already-computed commission as an effective fee % so the pure
+    // aggregator reproduces the exact recorded commission.
+    feePct: Number(c.gross_kes) > 0
+      ? (Number(c.commission_kes) / Number(c.gross_kes)) * 100
+      : 0,
   }));
 
   // Rent billed for the period (debits tagged with this period).

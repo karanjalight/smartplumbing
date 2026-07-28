@@ -69,6 +69,19 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 `SUPABASE_SERVICE_ROLE_KEY` is required for server actions that use the admin
 client (for example admin self-registration on `/sign-up`).
 
+LONGi vending needs two separate credential sets — one per utility, since
+water and electricity are vended through different LONGi merchant accounts:
+
+```env
+LONGI_USERNAME=...
+LONGI_PASSWORD_MD5=...
+LONGI_VENDING_BASE_URL=http://host:port/vendingservice
+
+LONGI_ELECTRICITY_USERNAME=...
+LONGI_ELECTRICITY_PASSWORD_MD5=...
+LONGI_ELECTRICITY_BASE_URL=http://host:port/vendingservice
+```
+
 Restart `npm run dev`.
 
 ---
@@ -121,7 +134,19 @@ The schema is grouped into eight domains:
   `unit_id` / `meter_id`; tracks `balance_kes`, `last_token_*`, `status`.
 - `token_purchases` — append-only ledger of every STS vend. Stores the
   LONGi `orderNo`, `sgc`, `ti`, `credit`, KCT tokens and the raw transaction
-  payload (`longi_raw_payload jsonb`).
+  payload (`longi_raw_payload jsonb`). Also carries electricity-only delivery
+  tracking: `delivery_status` (`pending` | `uploaded` | `cancelled`),
+  `delivery_status_at`, `delivery_status_by`, `delivery_response` (raw LONGi
+  response from whichever action last ran). Written only via
+  `lib/token-delivery.ts`'s `uploadTokenToMeter()` / `cancelTokenPurchase()`,
+  which use the admin (service-role) client with an explicit
+  tenant/admin/landlord ownership check — `token_purchases` RLS grants
+  tenants and landlords read-only access, so this follows the same
+  bypass-with-explicit-checks pattern as the LONGi webhook / `verify-vend`
+  route. Surfaced via `POST /api/token-purchases/:id/deliver` (tenant-facing)
+  and the `uploadPurchasedToken` / `cancelPurchasedToken` server actions
+  (`app/(dashboard)/dashboard/tokens/actions.ts`, admin/landlord).
+
 - `payments` — every collected payment. `category` distinguishes `rent` /
   `tokens` / `service` / `shop`; `method` is one of the existing UI enums.
 - `payouts` — landlord settlements (M-Pesa B2B or bank). `payout_payments`
@@ -279,6 +304,17 @@ await supabase.from("token_purchases").insert({
   note: null,
 });
 ```
+
+### 8.1a Electricity vending
+
+Electricity uses the same LONGi API shape as water (`docs/API.md` is
+utility-agnostic — `meterType` 0/4 are electricity, 1/5 are water) but a
+**separate merchant account**: `LONGI_ELECTRICITY_USERNAME` /
+`LONGI_ELECTRICITY_PASSWORD_MD5` / `LONGI_ELECTRICITY_BASE_URL`.
+`lib/longi-vending.ts`'s `getLongiConfigForUtility(utility)` picks the right
+credential set; every LONGi call site (onboarding validation, client
+purchase via Paystack, manual issuance) resolves `utility` from the target
+meter's `model_type` via `utilityOfModelType()` in `lib/meters-data.ts`.
 
 ### 8.2 Paystack (`app/api/paystack/*`)
 
