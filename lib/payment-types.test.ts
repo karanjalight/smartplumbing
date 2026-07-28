@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getAvailablePaymentTypes } from "@/lib/client-tenant-profile";
+import { getAvailablePaymentTypes } from "@/lib/payment-types";
 
 describe("getAvailablePaymentTypes", () => {
   it("includes water and rent when only a water meter is assigned", () => {

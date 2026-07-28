@@ -15,11 +15,8 @@ import { toast } from "sonner";
 
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { ClientMobileTopbar } from "@/components/client/client-mobile-topbar";
-import {
-  getAvailablePaymentTypes,
-  type ClientTenantProfile,
-  type PaymentType,
-} from "@/lib/client-tenant-profile";
+import type { ClientTenantProfile } from "@/lib/client-tenant-profile";
+import { getAvailablePaymentTypes, type PaymentType } from "@/lib/payment-types";
 import { formatKes } from "@/lib/tenants-data";
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 5000, 10000];
