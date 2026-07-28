@@ -125,7 +125,11 @@ async function finalizeStatus(
   target: "uploaded" | "cancelled",
   actorProfileId: string | null,
   raw: unknown
-): Promise<{ ok: true } | { ok: false; reason: "race" | "error"; error?: string }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; reason: "race"; currentStatus?: TokenDeliveryStatus }
+  | { ok: false; reason: "error"; error: string }
+> {
   const admin = getSupabaseAdminClient();
   const { data, error } = await admin
     .from("token_purchases")
@@ -143,7 +147,12 @@ async function finalizeStatus(
     return { ok: false, reason: "error", error: error.message };
   }
   if (!data) {
-    return { ok: false, reason: "race" };
+    const { data: current } = await admin
+      .from("token_purchases")
+      .select("delivery_status")
+      .eq("id", purchaseId)
+      .maybeSingle();
+    return { ok: false, reason: "race", currentStatus: current?.delivery_status };
   }
   return { ok: true };
 }
@@ -177,7 +186,7 @@ export async function uploadTokenToMeter(
       return {
         ok: false,
         error: "Another session already resolved this purchase.",
-        currentStatus: "uploaded",
+        currentStatus: applied.currentStatus,
       };
     }
     return {
@@ -219,7 +228,7 @@ export async function cancelTokenPurchase(
       return {
         ok: false,
         error: "Another session already resolved this purchase.",
-        currentStatus: "cancelled",
+        currentStatus: applied.currentStatus,
       };
     }
     return {

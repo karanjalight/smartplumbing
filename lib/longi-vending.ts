@@ -418,7 +418,7 @@ export async function longiVendToken(
 export async function longiCancelTransaction(
   config: LongiConfig,
   params: { orderNo: string }
-): Promise<{ ok: true; state?: number } | LongiVendError> {
+): Promise<{ ok: true; state?: number; raw: ServiceBaseVo & { state?: number } } | LongiVendError> {
   const orderNo = params.orderNo.trim();
   if (!orderNo) return { ok: false, error: "Order number is required", errorCode: 9004 };
 
@@ -454,14 +454,18 @@ export async function longiCancelTransaction(
     return { ok: false, error: msg, errorCode: data.errorCode };
   }
 
-  return { ok: true, state: typeof data.state === "number" ? data.state : undefined };
+  return {
+    ok: true,
+    state: typeof data.state === "number" ? data.state : undefined,
+    raw: data,
+  };
 }
 
 /** Chapter 13: push the STS token straight to the meter over the network. */
 export async function longiWriteToken(
   config: LongiConfig,
   params: { meterNo: string; ststoken: string }
-): Promise<{ ok: true } | LongiVendError> {
+): Promise<{ ok: true; raw: ServiceBaseVo } | LongiVendError> {
   const meterNo = params.meterNo.trim();
   const ststoken = params.ststoken.trim();
   if (!meterNo) return { ok: false, error: "Meter number is required", errorCode: 9002 };
@@ -495,7 +499,7 @@ export async function longiWriteToken(
     };
   }
 
-  return { ok: true };
+  return { ok: true, raw: data };
 }
 
 export function meterTypeLabel(meterType: number): string {
