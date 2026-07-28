@@ -1,10 +1,12 @@
-import { ClientHistoryView } from "@/components/client/client-history-view";
-import type { ClientHistoryRecord } from "@/components/client/client-history-view";
+import { ClientTokenHistoryList } from "@/components/client/client-token-history-list";
 import {
   DEMO_CLIENT_TENANT_PROFILE,
   fetchCurrentClientTenantProfile,
 } from "@/lib/client-tenant-profile";
-import { fetchClientTokenHistory } from "@/lib/client-token-history";
+import {
+  fetchClientTokenHistory,
+  type ClientTokenHistoryRecord,
+} from "@/lib/client-token-history";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -16,7 +18,7 @@ export default async function ClientsTokensPage() {
   const { profile, records } = await loadTokenHistoryPage();
 
   return (
-    <ClientHistoryView
+    <ClientTokenHistoryList
       title="Tokens"
       heading="Token Purchase History"
       summary="Review token purchases and recharge your meter whenever needed."
@@ -34,7 +36,7 @@ export default async function ClientsTokensPage() {
 
 async function loadTokenHistoryPage(): Promise<{
   profile: typeof DEMO_CLIENT_TENANT_PROFILE;
-  records: ClientHistoryRecord[];
+  records: ClientTokenHistoryRecord[];
 }> {
   try {
     const supabase = await getSupabaseServerClient();
