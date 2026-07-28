@@ -541,6 +541,57 @@ GET http://ip:port/vendingservice/checktransaction?token=${token}&orderNo=${orde
 
 ---
 
+## Chapter 13. Remote Write Token
+
+Write an STS token to the meter remotely instead of keying it in on the meter's keypad.
+
+### Endpoint
+
+```
+GET http://ip:port/vendingservice/writeToken?token=${token}&msno=${meterNo}&ststoken=${ststoken}
+```
+
+### Request parameters
+
+| Name | Type | Description |
+|------|------|--------------|
+| token | `String` | The session id, from `login` |
+| msno | `String` | Meter number |
+| ststoken | `String` | STS token (20 digits) |
+
+### Response: ServiceBaseVo
+
+| Member | Type | Description |
+|--------|------|--------------|
+| errorCode | `int` | `0` on success |
+| errorMsg | `String` | Error message |
+| data | `String` | Vendor-defined; empty on success |
+
+### Example: success
+
+```json
+{
+  "errorCode": 0,
+  "errorMsg": "SUCCESS",
+  "data": ""
+}
+```
+
+### Example: failure
+
+```json
+{
+  "errorCode": 1003,
+  "errorMsg": "The session has expired"
+}
+```
+
+### Possible error codes
+
+`0, 9001, 1003, 1011, 1004, 1006, 1007, 9020, 9021, 9022, 9023, 9025, 9040`
+
+---
+
 ## Summary: API flow for prepaid vending
 
 1. **Login** → obtain `token` (sessionId)
