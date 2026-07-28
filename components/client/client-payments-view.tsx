@@ -33,6 +33,7 @@ const PAYMENT_TAB_CONFIG: Array<{ type: PaymentType; icon: typeof Droplets; labe
 ];
 
 type PurchaseOk = {
+  id: string | null;
   orderNo: string;
   meterNo: string;
   customerName?: string;
@@ -42,6 +43,7 @@ type PurchaseOk = {
   kctToken1?: string;
   kctToken2?: string;
   subsidyToken?: string | null;
+  deliveryStatus: "pending" | "uploaded" | "cancelled";
 };
 
 type RentResult = {
@@ -126,6 +128,8 @@ export function ClientPaymentsView({
   const [purchasingElectricity, setPurchasingElectricity] = useState(false);
   const [payingRent, setPayingRent] = useState(false);
   const [rentResult, setRentResult] = useState<RentResult | null>(null);
+  const [deliveryBusy, setDeliveryBusy] = useState<"upload" | "cancel" | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const payerEmail = profile.email.includes("@") ? profile.email : "client@smartone.app";
   const meterNo = profile.meterNo.trim();
   const electricityMeterNo = profile.electricityMeterNo.trim();
@@ -181,6 +185,7 @@ export function ClientPaymentsView({
       const data = (await verifyRes.json()) as {
         ok?: boolean;
         error?: string;
+        purchaseId?: string | null;
         orderNo?: string;
         meterNo?: string;
         customerName?: string;
@@ -196,6 +201,7 @@ export function ClientPaymentsView({
         return;
       }
       setPurchaseResult({
+        id: data.purchaseId ?? null,
         orderNo: data.orderNo ?? "",
         meterNo: data.meterNo ?? meter,
         customerName: data.customerName,
@@ -205,6 +211,7 @@ export function ClientPaymentsView({
         kctToken1: data.kctToken1,
         kctToken2: data.kctToken2,
         subsidyToken: data.subsidyToken,
+        deliveryStatus: "pending",
       });
       toast.success("Payment confirmed. Token generated.");
     } catch {
@@ -215,6 +222,43 @@ export function ClientPaymentsView({
       } else {
         setPurchasing(false);
       }
+    }
+  }
+
+  async function actOnDelivery(action: "upload" | "cancel") {
+    if (!purchaseResult?.id) {
+      toast.error("This purchase has no saved record to act on yet.");
+      return;
+    }
+    setDeliveryBusy(action);
+    try {
+      const res = await fetch(`/api/token-purchases/${purchaseResult.id}/deliver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        status?: "uploaded" | "cancelled";
+        error?: string;
+        currentStatus?: "pending" | "uploaded" | "cancelled";
+      };
+      if (data.ok && data.status) {
+        setPurchaseResult((prev) => (prev ? { ...prev, deliveryStatus: data.status! } : prev));
+        toast.success(
+          data.status === "uploaded" ? "Token delivered to the meter." : "Purchase cancelled."
+        );
+      } else if (data.currentStatus) {
+        setPurchaseResult((prev) => (prev ? { ...prev, deliveryStatus: data.currentStatus! } : prev));
+        toast.message("Already resolved", { description: data.error });
+      } else {
+        toast.error(data.error || "That action could not be completed.");
+      }
+    } catch {
+      toast.error("Network error. The token above is still valid — you can retry.");
+    } finally {
+      setDeliveryBusy(null);
+      setConfirmingCancel(false);
     }
   }
 
@@ -544,6 +588,60 @@ export function ClientPaymentsView({
                     Copy token
                   </button>
                 </div>
+                {paymentType === "electricity" ? (
+                  <div className="mt-3">
+                    {purchaseResult.deliveryStatus === "pending" ? (
+                      confirmingCancel ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-white/80">
+                            Cancel this purchase? You won&apos;t be refunded automatically.
+                          </span>
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => void actOnDelivery("cancel")}
+                            className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            {deliveryBusy === "cancel" ? "Cancelling…" : "Yes, cancel"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => setConfirmingCancel(false)}
+                            className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            No, keep it
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => void actOnDelivery("upload")}
+                            className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-[#0A4266] disabled:opacity-50"
+                          >
+                            {deliveryBusy === "upload" ? "Uploading…" : "Upload Token"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deliveryBusy !== null}
+                            onClick={() => setConfirmingCancel(true)}
+                            className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <p className="text-xs font-medium text-white/85">
+                        {purchaseResult.deliveryStatus === "uploaded"
+                          ? "Delivered to meter"
+                          : "Purchase cancelled — no refund is issued automatically"}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : paymentType === "water" ? (
               <div className="mt-2">
