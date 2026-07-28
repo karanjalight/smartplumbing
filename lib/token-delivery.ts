@@ -93,11 +93,14 @@ async function loadPurchaseContext(purchaseId: string): Promise<LoadedPurchase> 
 
   let tenantLandlordId: string | null = null;
   if (row.tenant_id) {
-    const { data: tenant } = await admin
+    const { data: tenant, error: tenantErr } = await admin
       .from("tenants")
       .select("landlord_id")
       .eq("id", row.tenant_id)
       .maybeSingle();
+    if (tenantErr) {
+      return { ok: false, error: "Could not verify the purchase's landlord. Try again." };
+    }
     tenantLandlordId = tenant?.landlord_id ?? null;
   }
 
@@ -122,9 +125,9 @@ async function finalizeStatus(
   target: "uploaded" | "cancelled",
   actorProfileId: string | null,
   raw: unknown
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; reason: "race" | "error"; error?: string }> {
   const admin = getSupabaseAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("token_purchases")
     .update({
       delivery_status: target,
@@ -136,7 +139,13 @@ async function finalizeStatus(
     .eq("delivery_status", "pending")
     .select("id")
     .maybeSingle();
-  return Boolean(data);
+  if (error) {
+    return { ok: false, reason: "error", error: error.message };
+  }
+  if (!data) {
+    return { ok: false, reason: "race" };
+  }
+  return { ok: true };
 }
 
 /** Write the purchase's STS token to the meter remotely (LONGi Chapter 13). */
@@ -163,11 +172,18 @@ export async function uploadTokenToMeter(
   if (!write.ok) return { ok: false, error: write.error };
 
   const applied = await finalizeStatus(purchaseId, "uploaded", actorProfileId, write);
-  if (!applied) {
+  if (!applied.ok) {
+    if (applied.reason === "race") {
+      return {
+        ok: false,
+        error: "Another session already resolved this purchase.",
+        currentStatus: "uploaded",
+      };
+    }
     return {
       ok: false,
-      error: "Another session already resolved this purchase.",
-      currentStatus: "uploaded",
+      error:
+        "The token was written to the meter, but we couldn't save that — contact support with this purchase's order number before retrying.",
     };
   }
   return { ok: true, status: "uploaded" };
@@ -198,11 +214,18 @@ export async function cancelTokenPurchase(
   if (!cancel.ok) return { ok: false, error: cancel.error };
 
   const applied = await finalizeStatus(purchaseId, "cancelled", actorProfileId, cancel);
-  if (!applied) {
+  if (!applied.ok) {
+    if (applied.reason === "race") {
+      return {
+        ok: false,
+        error: "Another session already resolved this purchase.",
+        currentStatus: "cancelled",
+      };
+    }
     return {
       ok: false,
-      error: "Another session already resolved this purchase.",
-      currentStatus: "cancelled",
+      error:
+        "The purchase was cancelled with LONGi, but we couldn't save that — contact support with this purchase's order number before retrying.",
     };
   }
   return { ok: true, status: "cancelled" };
