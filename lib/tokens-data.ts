@@ -6,7 +6,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { listTokenPurchases } from "@/lib/supabase/queries";
-import type { Database, TokenPurchaseRow as DbTokenPurchaseRow } from "@/lib/supabase/types";
+import type {
+  Database,
+  TokenDeliveryStatus,
+  TokenPurchaseRow as DbTokenPurchaseRow,
+} from "@/lib/supabase/types";
 import { MOCK_TENANTS } from "@/lib/tenants-data";
 
 export type ManualTokenChannel = "office" | "call_center" | "field";
@@ -26,6 +30,9 @@ export type TokenPurchaseRow = {
   source: TokenPurchaseSource;
   /** Derived from the linked meter's model_type; "water" when the meter can't be resolved. */
   utility: "water" | "electricity";
+  /** Electricity only — always "pending" for water rows. */
+  deliveryStatus: TokenDeliveryStatus;
+  deliveryStatusAt: string | null;
   /** Manual issuance only */
   channel?: ManualTokenChannel;
   note?: string | null;
@@ -76,6 +83,8 @@ function manualRowsFromTenants(): TokenPurchaseRow[] {
     orderNo: `ORD-MAN-202604${String(100 + i).slice(-3)}`,
     source: "manual" as const,
     utility: "water" as const,
+    deliveryStatus: "pending" as const,
+    deliveryStatusAt: null,
     channel: i % 3 === 0 ? "office" : i % 3 === 1 ? "call_center" : "field",
     note: i === 0 ? "Customer app SMS failed" : null,
   }));
@@ -97,6 +106,8 @@ function digitalPurchaseRows(): TokenPurchaseRow[] {
       orderNo: isMpesa ? `ORD-STK-${String(240400 + i)}` : `ORD-APP-${String(8800 + i)}`,
       source: isMpesa ? ("m_pesa" as const) : ("app" as const),
       utility: "water" as const,
+      deliveryStatus: "pending" as const,
+      deliveryStatusAt: null,
       paymentRef: isMpesa ? `QKQ${String(1234567 + i)}` : null,
       note: null,
     };
@@ -174,6 +185,8 @@ export function mapDbTokenPurchaseToUiRow(
     orderNo: row.longi_order_no ?? row.id.slice(0, 8).toUpperCase(),
     source: row.source,
     utility: meterModelType ? utilityOfModelType(meterModelType) : "water",
+    deliveryStatus: row.delivery_status,
+    deliveryStatusAt: row.delivery_status_at,
     channel: row.manual_channel ?? undefined,
     note: row.note,
     paymentRef: row.payment_ref,
