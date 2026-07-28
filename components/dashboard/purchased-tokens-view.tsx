@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TokenDeliveryActions } from "@/components/dashboard/token-delivery-actions";
 import {
   channelLabel,
   fetchTokenPurchaseRows,
@@ -332,18 +333,19 @@ export function PurchasedTokensView() {
                   <th className="px-4 py-3 font-semibold">STS token</th>
                   <th className="px-4 py-3 font-semibold">Tenant / site</th>
                   <th className="px-4 py-3 font-semibold">Payment / detail</th>
+                  <th className="px-4 py-3 font-semibold">Delivery</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {listSource === "loading" ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                       Loading token purchases from Supabase…
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                       {rows.length === 0
                         ? "No token purchases yet. Issue one from Manual tokens."
                         : "No rows match your search."}
@@ -399,6 +401,17 @@ export function PurchasedTokensView() {
                           </span>
                         ) : (
                           <span>—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.utility === "electricity" ? (
+                          <TokenDeliveryActions
+                            purchaseId={row.id}
+                            deliveryStatus={row.deliveryStatus}
+                            onChanged={() => void load()}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                     </tr>
