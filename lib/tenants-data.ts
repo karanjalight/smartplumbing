@@ -24,6 +24,8 @@ export type TenantRow = {
   phone: string;
   meterId: string;
   electricityMeterId?: string | null;
+  /** Optional — undefined for MOCK_TENANTS rows; real rows set it explicitly. */
+  electricityMeterRelayState?: "connected" | "disconnected" | "unknown";
   property: string;
   unit: string;
   landlordId: string;
@@ -267,6 +269,8 @@ export type TenantDirectoryRow = DbTenantRow & {
   unit_label: string | null;
   meter_no: string | null;
   electricity_meter_no: string | null;
+  electricity_meter_relay_state: "connected" | "disconnected" | "unknown" | null;
+  electricity_meter_relay_state_at: string | null;
 };
 
 function formatTenantDate(value: string | null): string | null {
@@ -288,6 +292,7 @@ export function mapTenantDirectoryToUiRow(row: TenantDirectoryRow): TenantRow {
     phone: row.phone?.trim() || "—",
     meterId: row.meter_no?.trim() || "—",
     electricityMeterId: row.electricity_meter_no?.trim() || "—",
+    electricityMeterRelayState: row.electricity_meter_relay_state ?? "unknown",
     property: row.building_name?.trim() || "—",
     unit: row.unit_label?.trim() || "—",
     landlordId: row.landlord_id,
@@ -311,6 +316,8 @@ export function mapDbTenantToUiRow(row: DbTenantRow): TenantRow {
     unit_label: null,
     meter_no: null,
     electricity_meter_no: null,
+    electricity_meter_relay_state: null,
+    electricity_meter_relay_state_at: null,
   });
 }
 
@@ -329,6 +336,7 @@ function mapDbTenantRecordToUiRow(
     buildingNames: Map<string, string>;
     unitLabels: Map<string, string>;
     meterNos: Map<string, string>;
+    meterRelayStates: Map<string, "connected" | "disconnected" | "unknown">;
   },
 ): TenantRow {
   return {
@@ -342,6 +350,9 @@ function mapDbTenantRecordToUiRow(
     electricityMeterId: row.electricity_meter_id
       ? lookups.meterNos.get(row.electricity_meter_id)?.trim() || "—"
       : "—",
+    electricityMeterRelayState: row.electricity_meter_id
+      ? lookups.meterRelayStates.get(row.electricity_meter_id) ?? "unknown"
+      : "unknown",
     property: row.building_id
       ? lookups.buildingNames.get(row.building_id)?.trim() || "—"
       : "—",
@@ -430,8 +441,8 @@ export async function fetchTenantRowsForLandlord(
       ? client.from("units").select("id, label").in("id", unitIds)
       : Promise.resolve({ data: [] as { id: string; label: string }[] }),
     meterIds.length > 0
-      ? client.from("meters").select("id, meter_no").in("id", meterIds)
-      : Promise.resolve({ data: [] as { id: string; meter_no: string }[] }),
+      ? client.from("meters").select("id, meter_no, relay_state").in("id", meterIds)
+      : Promise.resolve({ data: [] as { id: string; meter_no: string; relay_state: string }[] }),
   ]);
 
   const lookups = {
@@ -440,6 +451,12 @@ export async function fetchTenantRowsForLandlord(
     ),
     unitLabels: new Map((unitsRes.data ?? []).map((u) => [u.id, u.label])),
     meterNos: new Map((metersRes.data ?? []).map((m) => [m.id, m.meter_no])),
+    meterRelayStates: new Map(
+      (metersRes.data ?? []).map((m) => [
+        m.id,
+        (m.relay_state ?? "unknown") as "connected" | "disconnected" | "unknown",
+      ]),
+    ),
   };
 
   return scopedTenants.map((row) => mapDbTenantRecordToUiRow(row, lookups));
@@ -485,8 +502,8 @@ export async function fetchTenantRows(
       ? client.from("units").select("id, label").in("id", unitIds)
       : Promise.resolve({ data: [] as { id: string; label: string }[] }),
     meterIds.length > 0
-      ? client.from("meters").select("id, meter_no").in("id", meterIds)
-      : Promise.resolve({ data: [] as { id: string; meter_no: string }[] }),
+      ? client.from("meters").select("id, meter_no, relay_state").in("id", meterIds)
+      : Promise.resolve({ data: [] as { id: string; meter_no: string; relay_state: string }[] }),
   ]);
 
   const lookups = {
@@ -495,6 +512,12 @@ export async function fetchTenantRows(
     ),
     unitLabels: new Map((unitsRes.data ?? []).map((u) => [u.id, u.label])),
     meterNos: new Map((metersRes.data ?? []).map((m) => [m.id, m.meter_no])),
+    meterRelayStates: new Map(
+      (metersRes.data ?? []).map((m) => [
+        m.id,
+        (m.relay_state ?? "unknown") as "connected" | "disconnected" | "unknown",
+      ]),
+    ),
   };
 
   return tenants.map((row) => mapDbTenantRecordToUiRow(row, lookups));
@@ -553,10 +576,10 @@ export async function fetchTenantDetailById(
       ? client.from("units").select("label").eq("id", row.unit_id).maybeSingle()
       : Promise.resolve({ data: null }),
     row.meter_id
-      ? client.from("meters").select("meter_no").eq("id", row.meter_id).maybeSingle()
+      ? client.from("meters").select("meter_no, relay_state").eq("id", row.meter_id).maybeSingle()
       : Promise.resolve({ data: null }),
     row.electricity_meter_id
-      ? client.from("meters").select("meter_no").eq("id", row.electricity_meter_id).maybeSingle()
+      ? client.from("meters").select("meter_no, relay_state").eq("id", row.electricity_meter_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -580,6 +603,22 @@ export async function fetchTenantDetailById(
           ? ([row.electricity_meter_id, electricityMeterRes.data.meter_no] as [string, string])
           : null,
       ].filter((entry): entry is [string, string] => entry !== null),
+    ),
+    meterRelayStates: new Map(
+      [
+        row.meter_id && meterRes.data?.relay_state
+          ? ([
+              row.meter_id,
+              (meterRes.data.relay_state ?? "unknown") as "connected" | "disconnected" | "unknown",
+            ] as [string, "connected" | "disconnected" | "unknown"])
+          : null,
+        row.electricity_meter_id && electricityMeterRes.data?.relay_state
+          ? ([
+              row.electricity_meter_id,
+              (electricityMeterRes.data.relay_state ?? "unknown") as "connected" | "disconnected" | "unknown",
+            ] as [string, "connected" | "disconnected" | "unknown"])
+          : null,
+      ].filter((entry): entry is [string, "connected" | "disconnected" | "unknown"] => entry !== null),
     ),
   };
 
