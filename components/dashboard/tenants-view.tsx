@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
 import { DeleteRowButton } from "@/components/dashboard/delete-row-button";
 import { deleteTenantRecord, previewDeleteTenant } from "@/app/(dashboard)/dashboard/tenants/actions";
+import { MeterRelayToggle } from "@/components/meters/meter-relay-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -684,6 +685,14 @@ export function TenantsView() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
+                          {row.electricityMeterId && row.electricityMeterId !== "—" ? (
+                            <MeterRelayToggle
+                              key={`${row.id}-${row.electricityMeterRelayState}`}
+                              meterNo={row.electricityMeterId}
+                              relayState={row.electricityMeterRelayState ?? "unknown"}
+                              compact
+                            />
+                          ) : null}
                           <Link
                             href={`/dashboard/tenants/${encodeURIComponent(row.id)}`}
                             className={cn(
