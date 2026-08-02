@@ -23,7 +23,7 @@
 ## Task 1: Database migration — relay state + view fixes
 
 **Files:**
-- Create: `supabase/migrations/0018_meter_relay_monitoring.sql`
+- Create: `supabase/migrations/0019_meter_relay_monitoring.sql`
 
 **Interfaces:**
 - Produces: `public.meter_relay_state` enum (`connected` | `disconnected` | `unknown`); `meters.relay_state`, `meters.relay_state_at`, `meters.relay_last_action_by`, `meters.relay_last_action_response`; `meter_directory.relay_state`, `meter_directory.relay_state_at`; `tenant_directory.electricity_meter_relay_state`, `tenant_directory.electricity_meter_relay_state_at`. All later tasks that touch `meters`/`meter_directory`/`tenant_directory` read/write these exact column names.
@@ -31,7 +31,7 @@
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- supabase/migrations/0018_meter_relay_monitoring.sql
+-- supabase/migrations/0019_meter_relay_monitoring.sql
 -- Remote relay (on/off) control + status monitoring for electricity meters.
 -- See docs/superpowers/specs/2026-08-02-meter-relay-monitoring-design.md.
 
@@ -127,7 +127,7 @@ at the end (a `CREATE OR REPLACE VIEW` that removes/reorders existing columns fa
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/0018_meter_relay_monitoring.sql
+git add supabase/migrations/0019_meter_relay_monitoring.sql
 git commit -m "feat: add meter relay state tracking + fix electricity meter tenant join"
 ```
 
@@ -2419,7 +2419,7 @@ end-to-end:
    this migration.
 2. With the Supabase CLI installed and linked (`supabase link`), run:
    `supabase db push`
-   — or paste the contents of `supabase/migrations/0018_meter_relay_monitoring.sql`
+   — or paste the contents of `supabase/migrations/0019_meter_relay_monitoring.sql`
    into the Supabase project's SQL editor.
 3. Confirm the migration applied cleanly (no error in the CLI output / SQL editor).
 

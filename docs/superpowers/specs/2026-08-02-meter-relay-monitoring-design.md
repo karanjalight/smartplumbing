@@ -114,7 +114,7 @@ lib/longi-vending.ts (new wrappers, same shape/conventions as longiVendToken)
 
 ## Components
 
-### 1. Database migration — `supabase/migrations/0018_meter_relay_monitoring.sql`
+### 1. Database migration — `supabase/migrations/0019_meter_relay_monitoring.sql`
 
 ```sql
 create type public.meter_relay_state as enum ('connected', 'disconnected', 'unknown');
@@ -223,9 +223,18 @@ No RLS changes — reads for the lists already go through existing view grants; 
 
 ### 6. `lib/tenants-data.ts`
 
-- `TenantRow` gains `electricityMeterNo: string | null`, `electricityMeterRelayState: MeterRelayState`.
-- `fetchTenantRows` / `fetchTenantRowsForLandlord` read the new `tenant_directory`
-  columns (`electricity_meter_no`, `electricity_meter_relay_state`).
+- `TenantRow.electricityMeterId` already holds the electricity **meter number**
+  (despite its name — `mapTenantDirectoryToUiRow` sets it from
+  `electricity_meter_no`), not a UUID; the toggle reuses this field as-is, gated on it
+  not being the existing `"—"` sentinel.
+- `TenantRow` gains one new field: `electricityMeterRelayState: MeterRelayState`.
+- `fetchTenantRows` / `fetchTenantRowsForLandlord` **do not** query the
+  `tenant_directory` view — they query `tenants` directly and manually join via a
+  `lookups.meterNos: Map<meterId, meterNo>` built from a separate `meters` query
+  (see `mapDbTenantRecordToUiRow`). Add `relay_state` to that same `meters` query and
+  a matching `lookups.meterRelayStates: Map<meterId, MeterRelayState>`.
+- `mapTenantDirectoryToUiRow` (used by whatever reads `tenant_directory` directly)
+  reads the view's new `electricity_meter_relay_state` column instead.
 
 ### 7. UI — shared components (new `components/meters/` — first cross-portal component
    folder; justified because auth is resolved server-side per request, so the same
