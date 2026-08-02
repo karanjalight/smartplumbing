@@ -43,11 +43,11 @@ describe("authorizeRelayAction", () => {
     expect(result).toEqual({ ok: false, error: "This meter is not in your portfolio." });
   });
 
-  it("allows a landlord when the meter has no owner recorded at all", () => {
+  it("rejects a landlord when the meter has no owner recorded at all (fail closed, not open)", () => {
     const result = authorizeRelayAction(
       { kind: "landlord", landlordId: "landlord-a" },
       { landlordId: null, buildingLandlordId: null }
     );
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: false, error: "This meter is not in your portfolio." });
   });
 });
