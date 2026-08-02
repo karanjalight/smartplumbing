@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import {
   fetchMeterRows,
   getMeterRows,
+  isElectricityMeter,
   meterTypeLabel,
   TABLE_PAGE_SIZE_OPTIONS,
   utilityOfModelType,
@@ -37,6 +38,8 @@ import {
   type MeterRow,
   type MeterUtility,
 } from "@/lib/meters-data";
+import { MeterRelayToggle } from "@/components/meters/meter-relay-toggle";
+import { RefreshMeterStatusButton } from "@/components/meters/refresh-meter-status-button";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -293,7 +296,11 @@ export function MetersView() {
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <RefreshMeterStatusButton
+            meterNos={filtered.map((r) => r.meterId)}
+            onDone={() => void load()}
+          />
           <Link
             href="/dashboard/meters/import"
             className={cn(
@@ -746,6 +753,20 @@ export function MetersView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
+                        {isElectricityMeter(row) ? (
+                          <MeterRelayToggle
+                            key={`${row.meterId}-${row.relayState}`}
+                            meterNo={row.meterId}
+                            relayState={row.relayState}
+                            onChanged={(next) =>
+                              setAllRows((prev) =>
+                                prev.map((r) =>
+                                  r.meterId === row.meterId ? { ...r, relayState: next } : r
+                                )
+                              )
+                            }
+                          />
+                        ) : null}
                         {row.tenantId ? (
                           <Link
                             href={`/dashboard/tenants/${encodeURIComponent(row.tenantId)}`}
