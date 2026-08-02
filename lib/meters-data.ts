@@ -13,6 +13,7 @@ import { listMeterDirectory } from "@/lib/supabase/queries";
 
 export type MeterLifecycleStatus = "active" | "inactive" | "fault" | "maintenance";
 export type MeterConnectivity = "online" | "offline" | "intermittent" | "unknown";
+export type MeterRelayState = "connected" | "disconnected" | "unknown";
 export type MeterModelType =
   | "water_prepay_m3"
   | "water_prepay_currency"
@@ -40,6 +41,8 @@ export type MeterRow = {
   latestReadingM3: number | null;
   lastSyncAt: string;
   openAlerts: number;
+  relayState: MeterRelayState;
+  relayStateAt: string | null;
 };
 
 type MeterMeta = Pick<
@@ -162,6 +165,12 @@ export function mapMeterDirectoryToUiRow(row: MeterDirectoryDbRow): MeterRow {
         timeStyle: "short",
       })
     : "Never";
+  const relayStateAt = row.relay_state_at
+    ? new Date(row.relay_state_at).toLocaleString("en-KE", {
+        dateStyle: "short",
+        timeStyle: "short",
+      })
+    : null;
 
   return {
     meterId: meterNo,
@@ -180,6 +189,8 @@ export function mapMeterDirectoryToUiRow(row: MeterDirectoryDbRow): MeterRow {
     latestReadingM3: row.latest_reading_m3 != null ? Number(row.latest_reading_m3) : null,
     lastSyncAt: lastSync,
     openAlerts: row.open_alerts ?? 0,
+    relayState: (row.relay_state ?? "unknown") as MeterRelayState,
+    relayStateAt,
   };
 }
 
@@ -210,6 +221,8 @@ export function buildMeterRowFromTenant(
     latestReadingM3: meta.latestReadingM3 ?? null,
     lastSyncAt: meta.lastSyncAt!,
     openAlerts: meta.openAlerts ?? 0,
+    relayState: "unknown",
+    relayStateAt: null,
   };
 }
 
@@ -242,6 +255,8 @@ const LOOSE_INVENTORY_METERS: MeterRow[] = [
     latestReadingM3: 0,
     lastSyncAt: "2026-05-10 09:15",
     openAlerts: 0,
+    relayState: "unknown",
+    relayStateAt: null,
   },
   {
     meterId: "0159000000992",
@@ -260,6 +275,8 @@ const LOOSE_INVENTORY_METERS: MeterRow[] = [
     latestReadingM3: 0,
     lastSyncAt: "2026-05-11 11:40",
     openAlerts: 0,
+    relayState: "unknown",
+    relayStateAt: null,
   },
   {
     meterId: "70000009993",
@@ -278,6 +295,8 @@ const LOOSE_INVENTORY_METERS: MeterRow[] = [
     latestReadingM3: null,
     lastSyncAt: "2026-04-20 07:00",
     openAlerts: 0,
+    relayState: "unknown",
+    relayStateAt: null,
   },
 ];
 
