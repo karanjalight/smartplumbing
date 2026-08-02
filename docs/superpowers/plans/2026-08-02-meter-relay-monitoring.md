@@ -1652,6 +1652,19 @@ Find the header buttons block (`<div className="flex shrink-0 gap-2">` containin
 
 - [ ] **Step 3: Add the toggle to the Shortcuts cell**
 
+Pass an explicit `key` on `<MeterRelayToggle>` that includes `relayState`
+(`key={\`${row.meterId}-${row.relayState}\`}`), not just the row's own key. This
+component keeps its own local `useState` mirror of `relayState` with no prop-resync
+`useEffect` (matching the existing `TokenDeliveryActions` convention in this
+codebase — same limitation, not fixed here) — after `RefreshMeterStatusButton`
+(Task 9) triggers a parent reload, `<tr key={row.meterId}>` stays stable, so React
+would otherwise reuse the same `MeterRelayToggle` instance and its badge would show
+stale state even though `row.relayState` changed. Including `relayState` in this
+component's own `key` forces a remount exactly when the value it displays changes,
+without touching the already-reviewed `MeterRelayToggle`/`TokenDeliveryActions`
+components themselves. Apply this same `key` pattern at every `<MeterRelayToggle>`
+site in this plan (Tasks 10–14).
+
 In the row-rendering `<td>` that currently renders Tenant/Site links + `DeleteRowButton`
 (the last `<td>` in the row, holding `className="px-4 py-3"` with a
 `<div className="flex flex-wrap gap-1.5">`), add the toggle as the first child of that
@@ -1662,6 +1675,7 @@ flex div:
                       <div className="flex flex-wrap gap-1.5">
                         {isElectricityMeter(row) ? (
                           <MeterRelayToggle
+                            key={`${row.meterId}-${row.relayState}`}
                             meterNo={row.meterId}
                             relayState={row.relayState}
                             onChanged={(next) =>
@@ -1739,6 +1753,7 @@ and its cell renders an "Open" link (or `—`) right-aligned. Change the header 
                       <div className="flex items-center justify-end gap-1.5">
                         {isElectricityMeter(row) ? (
                           <MeterRelayToggle
+                            key={`${row.meterId}-${row.relayState}`}
                             meterNo={row.meterId}
                             relayState={row.relayState}
                             compact
@@ -1810,6 +1825,7 @@ meter (the existing `"—"` sentinel means "none"):
                         <div className="flex items-center gap-2">
                           {row.electricityMeterId && row.electricityMeterId !== "—" ? (
                             <MeterRelayToggle
+                              key={`${row.id}-${row.electricityMeterRelayState}`}
                               meterNo={row.electricityMeterId}
                               relayState={row.electricityMeterRelayState ?? "unknown"}
                               compact
@@ -1873,6 +1889,7 @@ the first child:
                       <div className="flex justify-end gap-1">
                         {row.electricityMeterId && row.electricityMeterId !== "—" ? (
                           <MeterRelayToggle
+                            key={`${row.id}-${row.electricityMeterRelayState}`}
                             meterNo={row.electricityMeterId}
                             relayState={row.electricityMeterRelayState ?? "unknown"}
                             compact
@@ -2094,6 +2111,7 @@ export function MeterHealthView({
                     <td className="px-4 py-3">
                       {isElectricityMeter(row) ? (
                         <MeterRelayToggle
+                          key={`${row.meterId}-${row.relayState}`}
                           meterNo={row.meterId}
                           relayState={row.relayState}
                           onChanged={(next) =>
