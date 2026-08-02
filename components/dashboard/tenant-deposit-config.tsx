@@ -20,6 +20,7 @@ type Props = {
     electricityDepositRequired: boolean;
     electricityDepositAmount: number | null;
   };
+  onSaved?: () => void;
 };
 
 function MeterDepositRow({
@@ -77,6 +78,7 @@ export function TenantDepositConfig({
   hasWaterMeter,
   hasElectricityMeter,
   initial,
+  onSaved,
 }: Props) {
   const router = useRouter();
   const [waterRequired, setWaterRequired] = useState(initial.waterDepositRequired);
@@ -115,6 +117,7 @@ export function TenantDepositConfig({
     if (res.ok) {
       toast.success("Deposits saved");
       router.refresh();
+      onSaved?.();
     } else {
       toast.error(res.error);
     }

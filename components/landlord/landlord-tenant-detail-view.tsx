@@ -74,11 +74,13 @@ function LandlordTenantDetailBody({
   buildingId,
   landlord,
   payments,
+  onReload,
 }: {
   tenant: TenantDetail;
   buildingId?: string;
   landlord: Landlord | null;
   payments: PaymentRow[];
+  onReload?: () => void;
 }) {
   const allPayments = payments;
   const [payPageSize, setPayPageSize] = useState<number>(5);
@@ -156,6 +158,7 @@ function LandlordTenantDetailBody({
               electricityDepositRequired: tenant.electricityDepositRequired,
               electricityDepositAmount: tenant.electricityDepositAmount,
             }}
+            onSaved={onReload}
           />
 
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm dark:border-border/80">
@@ -622,6 +625,7 @@ export function LandlordTenantDetailPage({
       buildingId={detail.buildingId}
       landlord={detail.landlord}
       payments={detail.payments}
+      onReload={loadDetail}
     />
   );
 }
