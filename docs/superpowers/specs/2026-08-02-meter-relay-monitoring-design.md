@@ -133,7 +133,7 @@ create index meters_relay_state_idx on public.meters (relay_state);
 -- join predicate changes, no columns are removed/reordered.
 create or replace view public.meter_directory as
 select
-  m.id, m.meter_no, m.serial_number, m.model_type, m.lifecycle_status,
+  m.id, m.meter_no, m.serial_number, m.supplier, m.model_type, m.lifecycle_status,
   m.connectivity_status, m.installed_on, m.latest_reading_m3, m.last_sync_at,
   m.open_alerts, m.landlord_id, l.company as landlord_company, m.building_id,
   b.name as building_name, m.unit_id, u.label as unit_label,
