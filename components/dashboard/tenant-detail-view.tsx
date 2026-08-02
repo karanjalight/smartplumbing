@@ -20,7 +20,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { TenantDepositConfig } from "@/components/dashboard/tenant-deposit-config";
+import { TenantSetupProgress } from "@/components/dashboard/tenant-setup-progress";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
+import { computeTenantSetupProgress } from "@/lib/tenants/setup-progress";
 import {
   TABLE_PAGE_SIZE_OPTIONS,
   type Landlord,
@@ -123,6 +126,21 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
       ? "Prepaid (STS tokens)"
       : "Postpaid";
 
+  const setupProgress = computeTenantSetupProgress({
+    fullName: tenant.name,
+    phone: tenant.phone,
+    email: tenant.email,
+    unitId: tenant.houseUnitId ?? null,
+    hasWaterMeter: tenant.hasWaterMeter,
+    hasElectricityMeter: tenant.hasElectricityMeter,
+    waterDepositRequired: tenant.waterDepositRequired,
+    waterDepositAmount: tenant.waterDepositAmount,
+    electricityDepositRequired: tenant.electricityDepositRequired,
+    electricityDepositAmount: tenant.electricityDepositAmount,
+    leaseStatus: tenant.leaseStatus,
+    tenantSignedLease: tenant.tenantSignedLease,
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-border pb-6 dark:border-border/80 sm:flex-row sm:items-center sm:gap-4">
@@ -153,8 +171,23 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
         </div>
       </div>
 
+      <TenantSetupProgress progress={setupProgress} />
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <TenantDepositConfig
+            tenantId={tenant.id}
+            landlordId={tenant.landlordId}
+            hasWaterMeter={tenant.hasWaterMeter}
+            hasElectricityMeter={tenant.hasElectricityMeter}
+            initial={{
+              waterDepositRequired: tenant.waterDepositRequired,
+              waterDepositAmount: tenant.waterDepositAmount,
+              electricityDepositRequired: tenant.electricityDepositRequired,
+              electricityDepositAmount: tenant.electricityDepositAmount,
+            }}
+          />
+
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm dark:border-border/80">
             <h2 className="text-base font-semibold text-foreground">
               Tenant profile
