@@ -20,6 +20,8 @@ import Link from "next/link";
 import { notFound, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { TenantDepositConfig } from "@/components/dashboard/tenant-deposit-config";
+import { TenantSetupProgress } from "@/components/dashboard/tenant-setup-progress";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { resolveLandlordId } from "@/lib/landlords-data";
@@ -34,6 +36,7 @@ import {
   type PaymentRow,
   type TenantDetail,
 } from "@/lib/tenants-data";
+import { computeTenantSetupProgress } from "@/lib/tenants/setup-progress";
 import { cn } from "@/lib/utils";
 
 function tenantInitials(name: string) {
@@ -95,6 +98,21 @@ function LandlordTenantDetailBody({
       ? "Prepaid (STS tokens)"
       : "Postpaid";
 
+  const setupProgress = computeTenantSetupProgress({
+    fullName: tenant.name,
+    phone: tenant.phone === "—" ? null : tenant.phone,
+    email: tenant.email,
+    unitId: tenant.houseUnitId ?? null,
+    hasWaterMeter: tenant.hasWaterMeter,
+    hasElectricityMeter: tenant.hasElectricityMeter,
+    waterDepositRequired: tenant.waterDepositRequired,
+    waterDepositAmount: tenant.waterDepositAmount,
+    electricityDepositRequired: tenant.electricityDepositRequired,
+    electricityDepositAmount: tenant.electricityDepositAmount,
+    leaseStatus: tenant.leaseStatus,
+    tenantSignedLease: tenant.tenantSignedLease,
+  });
+
   return (
     <div className="space-y-6 pb-10">
       <div className="flex flex-col gap-4 border-b border-border pb-6 dark:border-border/80 sm:flex-row sm:items-center sm:gap-4">
@@ -123,8 +141,23 @@ function LandlordTenantDetailBody({
         </div>
       </div>
 
+      <TenantSetupProgress progress={setupProgress} />
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <TenantDepositConfig
+            tenantId={tenant.id}
+            landlordId={tenant.landlordId}
+            hasWaterMeter={tenant.hasWaterMeter}
+            hasElectricityMeter={tenant.hasElectricityMeter}
+            initial={{
+              waterDepositRequired: tenant.waterDepositRequired,
+              waterDepositAmount: tenant.waterDepositAmount,
+              electricityDepositRequired: tenant.electricityDepositRequired,
+              electricityDepositAmount: tenant.electricityDepositAmount,
+            }}
+          />
+
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm dark:border-border/80">
             <h2 className="text-base font-semibold text-foreground">Tenant profile</h2>
             <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
