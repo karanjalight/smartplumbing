@@ -37,6 +37,7 @@ export type MeterConnectivity =
   | "offline"
   | "intermittent"
   | "unknown";
+export type MeterRelayState = "connected" | "disconnected" | "unknown";
 export type MeterModelType =
   | "water_prepay_m3"
   | "water_prepay_currency"
@@ -229,6 +230,10 @@ export type MeterRow = Timestamps & {
   last_sync_at: string | null;
   open_alerts: number;
   notes: string | null;
+  relay_state: MeterRelayState;
+  relay_state_at: string | null;
+  relay_last_action_by: string | null;
+  relay_last_action_response: Json | null;
 }
 
 export type TenantRow = Timestamps & {
@@ -798,6 +803,8 @@ export type Database = {
           unit_label: string | null;
           meter_no: string | null;
           electricity_meter_no: string | null;
+          electricity_meter_relay_state: MeterRelayState | null;
+          electricity_meter_relay_state_at: string | null;
         }
       >;
       meter_directory: ViewDef<
@@ -830,6 +837,7 @@ export type Database = {
       unit_type: UnitType;
       meter_lifecycle: MeterLifecycle;
       meter_connectivity: MeterConnectivity;
+      meter_relay_state: MeterRelayState;
       meter_model_type: MeterModelType;
       payment_method: PaymentMethod;
       payment_category: PaymentCategory;
