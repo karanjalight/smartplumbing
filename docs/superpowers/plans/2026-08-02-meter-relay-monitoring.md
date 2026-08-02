@@ -957,12 +957,12 @@ describe("authorizeRelayAction", () => {
     expect(result).toEqual({ ok: false, error: "This meter is not in your portfolio." });
   });
 
-  it("allows a landlord when the meter has no owner recorded at all", () => {
+  it("rejects a landlord when the meter has no owner recorded at all (fail closed, not open)", () => {
     const result = authorizeRelayAction(
       { kind: "landlord", landlordId: "landlord-a" },
       { landlordId: null, buildingLandlordId: null }
     );
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: false, error: "This meter is not in your portfolio." });
   });
 });
 ```
@@ -1008,20 +1008,24 @@ export type RelayResult =
 
 type MeterOwnership = { landlordId: string | null; buildingLandlordId: string | null };
 
+/**
+ * True if `landlordId` owns this meter directly, or via the building it's
+ * installed in. Fails CLOSED: a meter with no recorded landlord_id and no
+ * building (or an unowned building) is NOT owned by anyone — never fall
+ * through to "no owner recorded, so allow it" for a landlord actor.
+ */
+function isMeterOwnedByLandlord(landlordId: string, meter: MeterOwnership): boolean {
+  if (meter.landlordId !== null) return meter.landlordId === landlordId;
+  return meter.buildingLandlordId !== null && meter.buildingLandlordId === landlordId;
+}
+
 /** Pure authorization guard — no I/O, fully unit-tested. */
 export function authorizeRelayAction(
   actor: RelayActor,
   meter: MeterOwnership
 ): { ok: true } | { ok: false; error: string } {
   if (actor.kind === "admin") return { ok: true };
-  if (meter.landlordId && meter.landlordId !== actor.landlordId) {
-    return { ok: false, error: "This meter is not in your portfolio." };
-  }
-  if (
-    !meter.landlordId &&
-    meter.buildingLandlordId &&
-    meter.buildingLandlordId !== actor.landlordId
-  ) {
+  if (!isMeterOwnedByLandlord(actor.landlordId, meter)) {
     return { ok: false, error: "This meter is not in your portfolio." };
   }
   return { ok: true };
@@ -1143,10 +1147,12 @@ export async function refreshMeterStatuses(
       .select("id")
       .eq("landlord_id", actor.landlordId);
     const buildingIds = new Set((buildings ?? []).map((b) => b.id));
-    scoped = scoped.filter(
-      (m) =>
-        m.landlord_id === actor.landlordId ||
-        (m.building_id != null && buildingIds.has(m.building_id))
+    scoped = scoped.filter((m) =>
+      isMeterOwnedByLandlord(actor.landlordId, {
+        landlordId: m.landlord_id,
+        buildingLandlordId:
+          m.building_id != null && buildingIds.has(m.building_id) ? actor.landlordId : null,
+      })
     );
   }
   if (scoped.length === 0) return { ok: true, updated: [] };
