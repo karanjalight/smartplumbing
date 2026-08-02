@@ -19,10 +19,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLandlordPortfolioStore } from "@/components/landlord/use-landlord-portfolio-store";
+import { MeterRelayToggle } from "@/components/meters/meter-relay-toggle";
+import { RefreshMeterStatusButton } from "@/components/meters/refresh-meter-status-button";
 import { getLandlordMeterRowsMerged } from "@/lib/landlord-meters-data";
 import { readStore } from "@/lib/landlord-portfolio-storage";
 import {
   fetchMeterRowsForLandlord,
+  isElectricityMeter,
   meterTypeLabel,
   TABLE_PAGE_SIZE_OPTIONS,
   type MeterConnectivity,
@@ -244,6 +247,10 @@ export function LandlordMetersView({
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
+          <RefreshMeterStatusButton
+            meterNos={filtered.map((r) => r.meterId)}
+            onDone={() => void load()}
+          />
           <Link
             href="/landlords/dashboard/meters/import"
             className={cn(
@@ -429,7 +436,7 @@ export function LandlordMetersView({
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Connectivity</th>
                 <th className="px-4 py-3 font-semibold">Alerts</th>
-                <th className="px-4 py-3 text-right font-semibold">Tenant</th>
+                <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -468,19 +475,34 @@ export function LandlordMetersView({
                     <td className="px-4 py-3">{connectivityBadge(row.connectivity)}</td>
                     <td className="px-4 py-3 tabular-nums text-foreground">{row.openAlerts}</td>
                     <td className="px-4 py-3 text-right">
-                      {row.tenantId ? (
-                        <Link
-                          href={`/landlords/dashboard/tenants?highlight=${encodeURIComponent(row.tenantId)}`}
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                            "h-8 rounded-full px-3 text-xs"
-                          )}
-                        >
-                          Open
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {isElectricityMeter(row) ? (
+                          <MeterRelayToggle
+                            key={`${row.meterId}-${row.relayState}`}
+                            meterNo={row.meterId}
+                            relayState={row.relayState}
+                            compact
+                            onChanged={(next) =>
+                              setAllRows((prev) =>
+                                prev.map((r) =>
+                                  r.meterId === row.meterId ? { ...r, relayState: next } : r
+                                )
+                              )
+                            }
+                          />
+                        ) : null}
+                        {row.tenantId ? (
+                          <Link
+                            href={`/landlords/dashboard/tenants?highlight=${encodeURIComponent(row.tenantId)}`}
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "h-8 rounded-full px-3 text-xs"
+                            )}
+                          >
+                            Open
+                          </Link>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))
