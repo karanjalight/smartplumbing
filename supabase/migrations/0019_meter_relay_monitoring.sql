@@ -21,6 +21,7 @@ select
   m.id,
   m.meter_no,
   m.serial_number,
+  m.supplier,
   m.model_type,
   m.lifecycle_status,
   m.connectivity_status,
