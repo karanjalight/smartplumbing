@@ -55,6 +55,15 @@ Admin and landlord portals list meters (`MetersView`, `LandlordMetersView`) and 
 - **No RLS changes.** Same bypass-with-explicit-checks pattern as
   `lib/token-delivery.ts`: the admin (service-role) client does the actual read/update,
   gated by application-level authorization first.
+- **Shared `"use server"` actions, not API routes.** This feature only has two actors
+  (admin, landlord — no tenant branch), which matches `createMeter`/`bulkImportMeters`
+  in `app/(dashboard)/dashboard/meters/actions.ts` exactly: a single server action file
+  under the admin route group, resolving admin-vs-landlord internally, imported
+  directly by both portals' components (the landlord onboarding page already reuses
+  `components/dashboard/onboard-meter-view.tsx` and its admin-side `createMeter` action
+  this same way). `lib/token-delivery.ts`'s API-route + `fetch` pattern is there
+  specifically because it also serves a **tenant** self-service actor from a purely
+  client-driven flow — not needed here.
 
 ## Architecture
 
@@ -68,12 +77,14 @@ Tenants list (admin TenantsView, landlord tenants view)
 
 MeterRelayToggle / RefreshMeterStatusButton (components/meters/, shared — auth is
 resolved server-side from the session, so one component serves both portals)
-  → POST /api/meters/relay          { meterNo, action: "connect" | "disconnect" }
-  → POST /api/meters/refresh-status { meterNos: string[] }
+  → setMeterRelay(meterNo, action: "connect" | "disconnect")   (server action)
+  → refreshMeterStatusesAction(meterNos: string[])              (server action)
 
-API routes (actor resolution mirrors app/api/token-purchases/[id]/deliver/route.ts)
+app/(dashboard)/dashboard/meters/relay-actions.ts (new, "use server" — mirrors
+createMeter's admin-vs-landlord resolution in the neighboring actions.ts; imported
+directly by both admin and landlord components, same as OnboardMeterView/createMeter)
   auth.getUser() → resolve role → { kind: "admin" } | { kind: "landlord", landlordId }
-  → lib/meter-relay.ts
+  → lib/meter-relay.ts → revalidatePath both portals' meters + tenants pages
 
 lib/meter-relay.ts (shared business logic, mirrors lib/token-delivery.ts)
   setMeterRelayState(actor, actorProfileId, meterNo, target)
@@ -186,13 +197,19 @@ No RLS changes — reads for the lists already go through existing view grants; 
   — `RelayResult = { ok: true; relayState: MeterRelayTarget } | { ok: false; error: string }`
 - `refreshMeterStatuses(actor, meterNos: string[]): Promise<{ ok: true; updated: MeterStatusUpdate[] } | { ok: false; error: string }>`
 
-### 4. API routes (new)
+### 4. `app/(dashboard)/dashboard/meters/relay-actions.ts` (new)
 
-- `app/api/meters/relay/route.ts` — `POST { meterNo, action: "connect" | "disconnect" }`.
-  Resolves actor from session exactly like `app/api/token-purchases/[id]/deliver/route.ts`
-  (admin / landlord branches only — no tenant branch here).
-- `app/api/meters/refresh-status/route.ts` — `POST { meterNos: string[] }`, same actor
-  resolution, calls `refreshMeterStatuses`.
+- `"use server"`. Resolves the caller's role/landlord scope the same way `createMeter`
+  does (`app/(dashboard)/dashboard/meters/actions.ts`): `auth.getUser()` →
+  `profiles.role` → for `"landlord"`, look up `landlords.id` by `profile_id`.
+- `setMeterRelay(meterNo: string, action: "connect" | "disconnect"): Promise<RelayResult>`
+  — builds the `RelayActor`, calls `lib/meter-relay.ts`'s `setMeterRelayState`,
+  `revalidatePath("/dashboard/meters")`, `revalidatePath("/landlords/dashboard/meters")`,
+  `revalidatePath("/dashboard/tenants")`, `revalidatePath("/landlords/dashboard/tenants")`.
+- `refreshMeterStatusesAction(meterNos: string[])` — same actor resolution, calls
+  `refreshMeterStatuses`, same `revalidatePath` calls.
+- Imported directly by components in **both** route groups (no API route needed) — the
+  same cross-portal import already used for `OnboardMeterView` → `createMeter`.
 
 ### 5. `lib/meters-data.ts` / `lib/supabase/types.ts`
 
@@ -215,16 +232,18 @@ No RLS changes — reads for the lists already go through existing view grants; 
    component is correct for both admin and landlord callers)
 
 - `meter-relay-toggle.tsx` — badge (Connected → "Power on" / Disconnected → "Power off" /
-  Unknown → "—") + one action button whose label/target flips with state. Turning
-  **off** opens a `ConfirmDeleteDialog`-style confirmation ("Cut power to meter
-  {meterNo}? The tenant loses electricity immediately."); turning **on** has no
-  confirmation. Calls `POST /api/meters/relay`, toasts the result, calls an `onChanged`
-  callback (mirrors `TokenDeliveryActions`) so the parent list patches local state
-  without a full reload.
+  Unknown → "—") + one action button whose label/target flips with state; a `compact`
+  prop switches to an icon-only button (for the tighter landlord tenants-list actions
+  cell). Turning **off** opens a `ConfirmDeleteDialog`-style confirmation ("Cut power to
+  meter {meterNo}? The tenant loses electricity immediately."); turning **on** has no
+  confirmation. Calls the `setMeterRelay` server action (§4), toasts the result, calls
+  an `onChanged` callback (mirrors `TokenDeliveryActions`) so the parent list patches
+  local state without a full reload.
 - `refresh-meter-status-button.tsx` — takes the currently visible `meterNos` (capped,
   e.g. 100, with a visible "refreshing first N of M" note if the filtered set exceeds
-  the cap — no silent truncation), calls `POST /api/meters/refresh-status`, then
-  re-invokes the parent's existing `load()` so the page re-reads fresh Supabase data.
+  the cap — no silent truncation), calls the `refreshMeterStatusesAction` server action
+  (§4), then re-invokes the parent's existing `load()` so the page re-reads fresh
+  Supabase data.
 
 ### 8. UI — Meters lists
 
@@ -293,7 +312,7 @@ No RLS changes — reads for the lists already go through existing view grants; 
   meter off then on from the Meters list, confirm `relayStatus` (Ch. 12) reflects it and
   an `activity_logs` row was written; confirm a water meter never renders the toggle.
 - Manual pass on landlord scoping: landlord A cannot see/toggle a meter belonging to
-  landlord B's portfolio (route returns 403-equivalent `{ ok: false }`).
+  landlord B's portfolio (`setMeterRelay` returns `{ ok: false, error: "..." }`).
 
 ## Out of scope
 
