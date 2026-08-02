@@ -95,6 +95,15 @@ const deleteTenantSchema = z.object({
   landlordId: z.string().min(1, "Landlord is required."),
 });
 
+const updateTenantDepositsSchema = z.object({
+  tenantId: uuidSchema,
+  landlordId: z.string().min(1, "Landlord is required."),
+  waterDepositRequired: z.boolean(),
+  waterDepositAmount: z.number().nonnegative().nullable(),
+  electricityDepositRequired: z.boolean(),
+  electricityDepositAmount: z.number().nonnegative().nullable(),
+});
+
 export type CreateTenantAccountResult =
   | {
       ok: true;
@@ -934,4 +943,57 @@ export async function previewDeleteTenant(input: unknown): Promise<DeletePreview
       tokens: tokens.count ?? 0,
     }),
   };
+}
+
+export async function updateTenantDeposits(input: unknown): Promise<ActionResult> {
+  const parsed = updateTenantDepositsSchema.safeParse(input);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return { ok: false, error: msg };
+  }
+
+  const {
+    tenantId,
+    landlordId,
+    waterDepositRequired,
+    waterDepositAmount,
+    electricityDepositRequired,
+    electricityDepositAmount,
+  } = parsed.data;
+
+  const actor = await assertPortfolioActor(landlordId);
+  if (!actor.ok) {
+    return { ok: false, error: actor.error };
+  }
+  const admin = actor.admin;
+
+  // Confirm the tenant belongs to the resolved landlord before writing.
+  const { data: existing, error: loadErr } = await admin
+    .from("tenants")
+    .select("id, landlord_id")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (loadErr) return { ok: false, error: loadErr.message };
+  if (!existing || existing.landlord_id !== actor.landlordId) {
+    return { ok: false, error: "Tenant not found." };
+  }
+
+  const { error: updateErr } = await admin
+    .from("tenants")
+    .update({
+      water_deposit_required: waterDepositRequired,
+      water_deposit_amount: waterDepositRequired ? waterDepositAmount : null,
+      electricity_deposit_required: electricityDepositRequired,
+      electricity_deposit_amount: electricityDepositRequired
+        ? electricityDepositAmount
+        : null,
+    })
+    .eq("id", tenantId);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  revalidatePath("/dashboard/tenants");
+  revalidatePath(`/dashboard/tenants/${tenantId}`);
+  revalidatePath("/landlords/dashboard/tenants");
+  revalidatePath(`/landlords/dashboard/tenants/${tenantId}`);
+  return { ok: true };
 }
