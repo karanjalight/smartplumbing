@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, TenantRow as DbTenantRow } from "@/lib/supabase/types";
 import { resolveLandlordId } from "@/lib/landlords-data";
+import { getActiveLeaseForTenant, listSignatures } from "@/lib/leases/queries";
 
 export type TenantStatus = "active" | "low_credit" | "inactive" | "overdue";
 
@@ -44,6 +45,14 @@ export type TenantDetailExtras = {
   nationalId: string | null;
   kraPin: string | null;
   depositAmountPaid: number | null;
+  hasWaterMeter: boolean;
+  hasElectricityMeter: boolean;
+  waterDepositRequired: boolean;
+  waterDepositAmount: number | null;
+  electricityDepositRequired: boolean;
+  electricityDepositAmount: number | null;
+  leaseStatus: "none" | "draft" | "pending_signature" | "active";
+  tenantSignedLease: boolean;
   secondaryPhones: string | null;
   billingModel: "prepaid_sts" | "postpaid";
   addressLine: string;
@@ -574,6 +583,16 @@ export async function fetchTenantDetailById(
     ),
   };
 
+  const activeLease = await getActiveLeaseForTenant(client, id);
+  const leaseStatus: TenantDetailExtras["leaseStatus"] = activeLease
+    ? (activeLease.status as "pending_signature" | "active")
+    : "none";
+  const tenantSignedLease = activeLease
+    ? (await listSignatures(client, activeLease.id)).some(
+        (s) => s.signer_role === "tenant",
+      )
+    : false;
+
   const base = mapDbTenantRecordToUiRow(row, lookups);
   const billingModel: TenantDetailExtras["billingModel"] =
     row.billing_model === "postpaid" ? "postpaid" : "prepaid_sts";
@@ -591,6 +610,18 @@ export async function fetchTenantDetailById(
       row.deposit_amount_paid != null
         ? Number(row.deposit_amount_paid)
         : null,
+    hasWaterMeter: row.meter_id != null,
+    hasElectricityMeter: row.electricity_meter_id != null,
+    waterDepositRequired: row.water_deposit_required,
+    waterDepositAmount:
+      row.water_deposit_amount != null ? Number(row.water_deposit_amount) : null,
+    electricityDepositRequired: row.electricity_deposit_required,
+    electricityDepositAmount:
+      row.electricity_deposit_amount != null
+        ? Number(row.electricity_deposit_amount)
+        : null,
+    leaseStatus,
+    tenantSignedLease,
     secondaryPhones: row.secondary_phones?.trim() || null,
     billingModel,
     addressLine:
@@ -699,6 +730,14 @@ const DEFAULT_EXTRAS: TenantDetailExtras = {
   nationalId: null,
   kraPin: null,
   depositAmountPaid: null,
+  hasWaterMeter: false,
+  hasElectricityMeter: false,
+  waterDepositRequired: false,
+  waterDepositAmount: null,
+  electricityDepositRequired: false,
+  electricityDepositAmount: null,
+  leaseStatus: "none",
+  tenantSignedLease: false,
   secondaryPhones: null,
   billingModel: "prepaid_sts",
   addressLine: "To be assigned",
