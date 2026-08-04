@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { summarizeDeposits, type DepositsSummary } from "@/lib/billing/deposits";
+import { listLedgerForTenant } from "@/lib/billing/queries";
 import type { Database, UnitImageRow, UnitRow } from "@/lib/supabase/types";
 
 type Client = SupabaseClient<Database>;
@@ -26,6 +28,7 @@ export type UnitDetail = {
     paysElectricityDeposit: boolean;
     paysRentDeposit: boolean;
   } | null;
+  tenantDepositsSummary: DepositsSummary | null;
   meterNo: string | null;
   images: UnitImageRow[];
 };
@@ -67,6 +70,9 @@ export async function getUnitDetail(
   const { data: meter } = await client
     .from("meters").select("meter_no").eq("unit_id", unitId).maybeSingle();
   const images = await listUnitImages(client, unitId);
+  const tenantDepositsSummary = tenant
+    ? summarizeDeposits(await listLedgerForTenant(client, tenant.id))
+    : null;
 
   return {
     unit,
@@ -84,6 +90,7 @@ export async function getUnitDetail(
           paysRentDeposit: tenant.pays_rent_deposit,
         }
       : null,
+    tenantDepositsSummary,
     meterNo: meter?.meter_no ?? null,
     images,
   };

@@ -20,10 +20,18 @@ import Link from "next/link";
 import { notFound, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { DepositsLedger } from "@/components/billing/deposits-ledger";
 import { TenantDepositConfig } from "@/components/dashboard/tenant-deposit-config";
 import { TenantSetupProgress } from "@/components/dashboard/tenant-setup-progress";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  applicableDepositKinds,
+  summarizeDeposits,
+  type DepositKind,
+  type DepositsSummary,
+} from "@/lib/billing/deposits";
+import { listLedgerForTenant } from "@/lib/billing/queries";
 import { resolveLandlordId } from "@/lib/landlords-data";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -74,12 +82,14 @@ function LandlordTenantDetailBody({
   buildingId,
   landlord,
   payments,
+  depositsSummary,
   onReload,
 }: {
   tenant: TenantDetail;
   buildingId?: string;
   landlord: Landlord | null;
   payments: PaymentRow[];
+  depositsSummary: DepositsSummary;
   onReload?: () => void;
 }) {
   const allPayments = payments;
@@ -116,6 +126,22 @@ function LandlordTenantDetailBody({
     leaseStatus: tenant.leaseStatus,
     tenantSignedLease: tenant.tenantSignedLease,
   });
+
+  const payableKinds: DepositKind[] = applicableDepositKinds({
+    tenantId: tenant.id,
+    landlordId: tenant.landlordId,
+    leaseId: null,
+    hasWaterMeter: tenant.hasWaterMeter,
+    hasElectricityMeter: tenant.hasElectricityMeter,
+    paysWaterDeposit: tenant.paysWaterDeposit,
+    paysElectricityDeposit: tenant.paysElectricityDeposit,
+    paysRentDeposit: tenant.paysRentDeposit,
+    waterMeterDepositKes: tenant.waterMeterDepositKes,
+    electricityMeterDepositKes: tenant.electricityMeterDepositKes,
+    rentDepositKes: tenant.rentDepositKes,
+  });
+  const chargedKinds = new Set((depositsSummary.perKind ?? []).map((k) => k.kind));
+  const chargeableKinds = payableKinds.filter((k) => !chargedKinds.has(k));
 
   return (
     <div className="space-y-6 pb-10">
@@ -165,6 +191,14 @@ function LandlordTenantDetailBody({
               paysRentDeposit: tenant.paysRentDeposit,
             }}
             onSaved={onReload}
+          />
+
+          <DepositsLedger
+            tenantId={tenant.id}
+            landlordId={tenant.landlordId}
+            summary={depositsSummary}
+            payableKinds={payableKinds}
+            chargeableKinds={chargeableKinds}
           />
 
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm dark:border-border/80">
@@ -551,6 +585,7 @@ type DetailState =
       buildingId?: string;
       landlord: Landlord | null;
       payments: PaymentRow[];
+      depositsSummary: DepositsSummary;
     }
   | { status: "missing" }
   | { status: "error"; message: string };
@@ -584,16 +619,19 @@ export function LandlordTenantDetailPage({
         setDetail({ status: "missing" });
         return;
       }
-      const [landlord, payments] = await Promise.all([
+      const [landlord, payments, ledger] = await Promise.all([
         fetchLandlordForTenant(supabase, tenant.landlordId),
         fetchPaymentsForTenant(supabase, tenantId),
+        listLedgerForTenant(supabase, tenantId),
       ]);
+      const depositsSummary = summarizeDeposits(ledger);
       setDetail({
         status: "ready",
         tenant,
         buildingId: tenant.buildingId ?? undefined,
         landlord,
         payments,
+        depositsSummary,
       });
     } catch (e) {
       setDetail({
@@ -631,6 +669,7 @@ export function LandlordTenantDetailPage({
       buildingId={detail.buildingId}
       landlord={detail.landlord}
       payments={detail.payments}
+      depositsSummary={detail.depositsSummary}
       onReload={loadDetail}
     />
   );
