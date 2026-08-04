@@ -121,7 +121,13 @@ export async function setMeterRelayState(
       relay_last_action_response: (call.data ?? null) as unknown as Json,
     } as never)
     .eq("id", meter.id);
-  if (updateErr) return { ok: false, error: updateErr.message };
+  if (updateErr) {
+    return {
+      ok: false,
+      error:
+        "The meter's power was changed, but we couldn't save that — use \"Refresh status\" to confirm the current state, and contact support if it looks wrong.",
+    };
+  }
 
   await admin.from("activity_logs").insert([
     {
@@ -149,13 +155,21 @@ export type MeterStatusUpdate = {
 
 /** Bulk on-demand refresh: LONGi Get Online Status (best-effort, all meters) +
  *  Get Meter Relay Status (electricity meters only), persisted to `meters`. */
+const REFRESH_SERVER_CAP = 100;
+
 export async function refreshMeterStatuses(
   actor: RelayActor,
   meterNos: string[]
-): Promise<{ ok: true; updated: MeterStatusUpdate[] } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; updated: MeterStatusUpdate[]; requested: number }
+  | { ok: false; error: string }
+> {
   const admin = getSupabaseAdminClient();
-  const trimmed = [...new Set(meterNos.map((m) => m.trim()).filter(Boolean))];
-  if (trimmed.length === 0) return { ok: true, updated: [] };
+  const trimmed = [...new Set(meterNos.map((m) => m.trim()).filter(Boolean))].slice(
+    0,
+    REFRESH_SERVER_CAP
+  );
+  if (trimmed.length === 0) return { ok: true, updated: [], requested: 0 };
 
   const { data: meters, error } = await admin
     .from("meters")
@@ -178,7 +192,7 @@ export async function refreshMeterStatuses(
       })
     );
   }
-  if (scoped.length === 0) return { ok: true, updated: [] };
+  if (scoped.length === 0) return { ok: true, updated: [], requested: 0 };
 
   const waterMeters = scoped.filter(
     (m) => utilityOfModelType(m.model_type as MeterModelType) === "water"
@@ -242,5 +256,5 @@ export async function refreshMeterStatuses(
     await admin.from("meters").update(patch as never).eq("id", m.id);
   }
 
-  return { ok: true, updated: Array.from(updates.values()) };
+  return { ok: true, updated: Array.from(updates.values()), requested: scoped.length };
 }

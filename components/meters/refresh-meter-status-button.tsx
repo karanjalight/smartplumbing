@@ -31,13 +31,25 @@ export function RefreshMeterStatusButton({
         toast.error(result.error);
         return;
       }
-      const note =
-        meterNos.length > REFRESH_BATCH_CAP
-          ? ` (refreshed first ${REFRESH_BATCH_CAP} of ${meterNos.length})`
-          : "";
-      toast.success(
-        `Status refreshed for ${result.updated.length} meter${result.updated.length === 1 ? "" : "s"}.${note}`
-      );
+      const succeeded = result.updated.filter(
+        (u) => u.connectivity !== null || u.relayState !== null
+      ).length;
+      const total = result.updated.length;
+      if (total === 0) {
+        toast.message("No meters to refresh.");
+      } else if (succeeded === 0) {
+        toast.error("Could not reach the meter status service. Try again shortly.");
+      } else if (succeeded < total) {
+        toast.message(
+          `Refreshed ${succeeded} of ${total} meter${total === 1 ? "" : "s"} — no response for the rest.`
+        );
+      } else {
+        const note =
+          meterNos.length > REFRESH_BATCH_CAP
+            ? ` (refreshed first ${REFRESH_BATCH_CAP} of ${meterNos.length})`
+            : "";
+        toast.success(`Status refreshed for ${succeeded} meter${succeeded === 1 ? "" : "s"}.${note}`);
+      }
       onDone();
     } catch {
       toast.error("Could not refresh meter status.");

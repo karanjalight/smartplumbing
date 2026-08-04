@@ -145,6 +145,10 @@ The schema is grouped into eight domains:
   `tenants.electricity_meter_id`, not just `tenants.meter_id` (previously
   electricity meters showed no tenant/unit in the admin/landlord Meters
   lists).
+- The same migration added `electricity_meter_relay_state` and
+  `electricity_meter_relay_state_at` to `tenant_directory`, so the relay's
+  on/off state is visible alongside a tenant's electricity meter without an
+  extra join.
 
 ### 4.4 Tenants & water billing
 
