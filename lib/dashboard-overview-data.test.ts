@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRecentActivity,
+  categoryDisplayLabel,
   countPendingElectricityDeliveries,
   formatMomChangeLabel,
+  formatRelativeTime,
+  summarizeCategoryDistribution,
   summarizeDashboard,
+  summarizeMonthlyRevenue,
+  summarizePaymentMethodMix,
   summarizeTokenSales,
 } from "@/lib/dashboard-overview-data";
 import type { MeterModelType } from "@/lib/meters-data";
@@ -303,5 +309,124 @@ describe("countPendingElectricityDeliveries", () => {
       tokenPurchaseRow({ id: "tp1", meter_id: null, delivery_status: "pending" }),
     ];
     expect(countPendingElectricityDeliveries(tokenPurchases, meterModelTypeById)).toBe(0);
+  });
+});
+
+describe("summarizePaymentMethodMix", () => {
+  it("returns an empty array when there are no completed payments in range", () => {
+    expect(summarizePaymentMethodMix([], "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z")).toEqual([]);
+  });
+
+  it("groups completed payments by method within the range, sorted desc by kes", () => {
+    const payments = [
+      paymentRow({ id: "p1", method: "M-Pesa", amount_kes: 300, created_at: "2026-03-01T09:00:00.000Z" }),
+      paymentRow({ id: "p2", method: "Cash", amount_kes: 700, created_at: "2026-03-02T09:00:00.000Z" }),
+      paymentRow({ id: "p3", method: "M-Pesa", amount_kes: 100, status: "pending", created_at: "2026-03-03T09:00:00.000Z" }),
+      paymentRow({ id: "p4", method: "Bank", amount_kes: 500, created_at: "2025-12-31T09:00:00.000Z" }),
+    ];
+    const result = summarizePaymentMethodMix(payments, "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    expect(result).toEqual([
+      { name: "Cash", kes: 700, pct: 70 },
+      { name: "M-Pesa", kes: 300, pct: 30 },
+    ]);
+  });
+});
+
+describe("summarizeMonthlyRevenue", () => {
+  it("returns one point per month from January through the current month", () => {
+    const result = summarizeMonthlyRevenue([], 2026, NOW);
+    expect(result).toHaveLength(8);
+    expect(result[0]).toEqual({ month: "Jan", kes: 0 });
+    expect(result[7]).toEqual({ month: "Aug", kes: 0 });
+  });
+
+  it("sums completed payments into the right month and ignores other years", () => {
+    const payments = [
+      paymentRow({ id: "p1", amount_kes: 400, created_at: "2026-02-15T09:00:00.000Z" }),
+      paymentRow({ id: "p2", amount_kes: 600, created_at: "2026-02-20T09:00:00.000Z" }),
+      paymentRow({ id: "p3", amount_kes: 999, created_at: "2025-02-20T09:00:00.000Z" }),
+      paymentRow({ id: "p4", amount_kes: 999, status: "failed", created_at: "2026-02-20T09:00:00.000Z" }),
+    ];
+    const result = summarizeMonthlyRevenue(payments, 2026, NOW);
+    const feb = result.find((point) => point.month === "Feb");
+    expect(feb?.kes).toBe(1000);
+  });
+
+  it("returns all 12 months for a fully past year", () => {
+    const result = summarizeMonthlyRevenue([], 2025, NOW);
+    expect(result).toHaveLength(12);
+  });
+});
+
+describe("summarizeCategoryDistribution", () => {
+  it("omits categories with zero completed payments and sorts desc by kes", () => {
+    const payments = [
+      paymentRow({ id: "p1", category: "rent", amount_kes: 800, created_at: "2026-03-01T09:00:00.000Z" }),
+      paymentRow({ id: "p2", category: "tokens", amount_kes: 200, created_at: "2026-03-02T09:00:00.000Z" }),
+    ];
+    const result = summarizeCategoryDistribution(payments, "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    expect(result).toEqual([
+      { category: "rent", kes: 800, pct: 80 },
+      { category: "tokens", kes: 200, pct: 20 },
+    ]);
+  });
+});
+
+describe("categoryDisplayLabel", () => {
+  it("labels every payment category", () => {
+    expect(categoryDisplayLabel("rent")).toBe("Rent");
+    expect(categoryDisplayLabel("tokens")).toBe("Tokens");
+    expect(categoryDisplayLabel("service")).toBe("Service");
+    expect(categoryDisplayLabel("shop")).toBe("Shop");
+    expect(categoryDisplayLabel("deposit")).toBe("Deposit");
+  });
+});
+
+describe("buildRecentActivity", () => {
+  it("merges payments and token purchases sorted by createdAt desc, resolving tenant names", () => {
+    const tenantNamesById = new Map([["tenant-1", "Jane Wanjiru"]]);
+    const payments = [
+      paymentRow({ id: "p1", tenant_id: "tenant-1", created_at: "2026-08-10T09:00:00.000Z" }),
+    ];
+    const tokenPurchases = [
+      tokenPurchaseRow({ id: "tp1", tenant_id: "tenant-2", created_at: "2026-08-11T09:00:00.000Z" }),
+    ];
+    const result = buildRecentActivity(payments, tokenPurchases, tenantNamesById, 8);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ kind: "token", id: "tp1", tenantName: null });
+    expect(result[1]).toMatchObject({ kind: "payment", id: "p1", tenantName: "Jane Wanjiru" });
+  });
+
+  it("respects the limit after merging", () => {
+    const payments = [
+      paymentRow({ id: "p1", created_at: "2026-08-10T09:00:00.000Z" }),
+      paymentRow({ id: "p2", created_at: "2026-08-11T09:00:00.000Z" }),
+      paymentRow({ id: "p3", created_at: "2026-08-12T09:00:00.000Z" }),
+    ];
+    const result = buildRecentActivity(payments, [], new Map(), 2);
+    expect(result).toHaveLength(2);
+    expect(result.map((i) => i.id)).toEqual(["p3", "p2"]);
+  });
+
+  it("keeps a stable order for identical timestamps instead of throwing", () => {
+    const payments = [
+      paymentRow({ id: "p1", created_at: "2026-08-10T09:00:00.000Z" }),
+      paymentRow({ id: "p2", created_at: "2026-08-10T09:00:00.000Z" }),
+    ];
+    const result = buildRecentActivity(payments, [], new Map(), 8);
+    expect(result.map((i) => i.id).sort()).toEqual(["p1", "p2"]);
+  });
+});
+
+describe("formatRelativeTime", () => {
+  it("formats minutes, hours, and days ago", () => {
+    expect(formatRelativeTime("2026-08-15T11:59:30.000Z", NOW)).toBe("just now");
+    expect(formatRelativeTime("2026-08-15T11:30:00.000Z", NOW)).toBe("30m ago");
+    expect(formatRelativeTime("2026-08-15T06:00:00.000Z", NOW)).toBe("6h ago");
+    expect(formatRelativeTime("2026-08-12T12:00:00.000Z", NOW)).toBe("3d ago");
+  });
+
+  it("falls back to a short date at 7+ days", () => {
+    expect(formatRelativeTime("2026-07-28T12:00:00.000Z", NOW)).toBe("Jul 28");
   });
 });

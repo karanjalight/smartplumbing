@@ -7,9 +7,14 @@
 import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import type {
   MeterRow,
+  PaymentCategory,
+  PaymentMethod,
   PaymentRow,
+  PaymentStatus,
   TenantRow,
+  TokenDeliveryStatus,
   TokenPurchaseRow,
+  TokenSource,
 } from "@/lib/supabase/types";
 
 function kes(amount: number | string | null): number {
@@ -160,4 +165,175 @@ export function countPendingElectricityDeliveries(
   return tokenPurchases.filter(
     (t) => t.delivery_status === "pending" && isElectricityPurchase(t, meterModelTypeById)
   ).length;
+}
+
+// ---------- Payment method mix -----------------------------------------------
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export type PaymentMethodSlice = { name: PaymentMethod; kes: number; pct: number };
+
+/**
+ * Completed payments only, in [fromIso, toIso). Methods with 0 KES are
+ * omitted. `pct` is rounded independently per slice, so the set may not sum
+ * to exactly 100 (fine for display — recharts renders proportionally).
+ */
+export function summarizePaymentMethodMix(
+  payments: PaymentRow[],
+  fromIso: string,
+  toIso: string
+): PaymentMethodSlice[] {
+  const totals = new Map<PaymentMethod, number>();
+  for (const p of payments) {
+    if (p.status !== "completed") continue;
+    if (p.created_at < fromIso || p.created_at >= toIso) continue;
+    totals.set(p.method, (totals.get(p.method) ?? 0) + kes(p.amount_kes));
+  }
+  const grandTotal = [...totals.values()].reduce((s, v) => s + v, 0);
+  if (grandTotal === 0) return [];
+  return [...totals.entries()]
+    .map(([name, amount]) => ({ name, kes: amount, pct: Math.round((amount / grandTotal) * 100) }))
+    .sort((a, b) => b.kes - a.kes);
+}
+
+// ---------- Monthly revenue ---------------------------------------------------
+
+export type MonthlyRevenuePoint = { month: string; kes: number };
+
+/** Completed payments only, January through the current month of `year`. */
+export function summarizeMonthlyRevenue(
+  payments: PaymentRow[],
+  year: number,
+  now: Date
+): MonthlyRevenuePoint[] {
+  const monthCount =
+    year === now.getFullYear() ? now.getMonth() + 1 : year < now.getFullYear() ? 12 : 0;
+
+  const totals = new Array(monthCount).fill(0);
+  for (const p of payments) {
+    if (p.status !== "completed") continue;
+    const createdAt = new Date(p.created_at);
+    if (createdAt.getFullYear() !== year) continue;
+    const monthIndex = createdAt.getMonth();
+    if (monthIndex < monthCount) totals[monthIndex] += kes(p.amount_kes);
+  }
+
+  return totals.map((total, index) => ({ month: MONTH_LABELS[index], kes: total }));
+}
+
+// ---------- Category distribution ---------------------------------------------
+
+export type CategorySlice = { category: PaymentCategory; kes: number; pct: number };
+
+/**
+ * Completed payments only, in [fromIso, toIso). Sorted desc by kes. Zero
+ * categories omitted. Same rounding-tolerance note as PaymentMethodSlice.
+ */
+export function summarizeCategoryDistribution(
+  payments: PaymentRow[],
+  fromIso: string,
+  toIso: string
+): CategorySlice[] {
+  const totals = new Map<PaymentCategory, number>();
+  for (const p of payments) {
+    if (p.status !== "completed") continue;
+    if (p.created_at < fromIso || p.created_at >= toIso) continue;
+    totals.set(p.category, (totals.get(p.category) ?? 0) + kes(p.amount_kes));
+  }
+  const grandTotal = [...totals.values()].reduce((s, v) => s + v, 0);
+  if (grandTotal === 0) return [];
+  return [...totals.entries()]
+    .filter(([, amount]) => amount > 0)
+    .map(([category, amount]) => ({ category, kes: amount, pct: Math.round((amount / grandTotal) * 100) }))
+    .sort((a, b) => b.kes - a.kes);
+}
+
+export function categoryDisplayLabel(category: PaymentCategory): string {
+  switch (category) {
+    case "rent":
+      return "Rent";
+    case "tokens":
+      return "Tokens";
+    case "service":
+      return "Service";
+    case "shop":
+      return "Shop";
+    case "deposit":
+      return "Deposit";
+  }
+}
+
+// ---------- Recent activity -----------------------------------------------------
+
+export type ActivityItem =
+  | {
+      kind: "payment";
+      id: string;
+      createdAt: string;
+      amountKes: number;
+      method: PaymentMethod;
+      category: PaymentCategory;
+      status: PaymentStatus;
+      tenantName: string | null;
+    }
+  | {
+      kind: "token";
+      id: string;
+      createdAt: string;
+      amountKes: number;
+      meterNo: string;
+      source: TokenSource;
+      deliveryStatus: TokenDeliveryStatus;
+      tenantName: string | null;
+    };
+
+/** Merges both sources, sorts by createdAt desc, returns the first `limit`. */
+export function buildRecentActivity(
+  payments: PaymentRow[],
+  tokenPurchases: TokenPurchaseRow[],
+  tenantNamesById: Map<string, string>,
+  limit: number
+): ActivityItem[] {
+  const paymentItems: ActivityItem[] = payments.map((p) => ({
+    kind: "payment",
+    id: p.id,
+    createdAt: p.created_at,
+    amountKes: kes(p.amount_kes),
+    method: p.method,
+    category: p.category,
+    status: p.status,
+    tenantName: p.tenant_id ? (tenantNamesById.get(p.tenant_id) ?? null) : null,
+  }));
+  const tokenItems: ActivityItem[] = tokenPurchases.map((t) => ({
+    kind: "token",
+    id: t.id,
+    createdAt: t.created_at,
+    amountKes: kes(t.amount_kes),
+    meterNo: t.meter_no,
+    source: t.source,
+    deliveryStatus: t.delivery_status,
+    tenantName: t.tenant_id ? (tenantNamesById.get(t.tenant_id) ?? null) : null,
+  }));
+  return [...paymentItems, ...tokenItems]
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .slice(0, limit);
+}
+
+/**
+ * "{n}m ago" (< 1h, "just now" under 1 minute), "{n}h ago" (< 24h),
+ * "{n}d ago" (1-6 days); at 7+ days falls back to a short date, e.g. "Jul 28".
+ */
+export function formatRelativeTime(iso: string, now: Date): string {
+  const diffMs = now.getTime() - new Date(iso).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  const date = new Date(iso);
+  const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+  const day = date.getDate();
+  return `${month} ${day}`;
 }
