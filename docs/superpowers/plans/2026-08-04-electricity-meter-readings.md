@@ -334,11 +334,24 @@ export function decodeAxdrValue(hex: string): AxdrDecodedValue | null {
   }
 
   function readInt(n: number): number | null {
-    const u = readUint(n);
-    if (u === null) return null;
-    const max = 2 ** (8 * n);
-    const signBit = 2 ** (8 * n - 1);
-    return u >= signBit ? u - max : u;
+    if (rest.length < n) return null;
+    if ((rest[0] & 0x80) === 0) return readUint(n);
+    // Negative: compute the two's-complement magnitude via invert+increment
+    // (with carry propagation from the LSB), rather than forming the raw
+    // unsigned value and subtracting 2**(8n). For n=8 that raw value is
+    // ~2**64, which loses precision as a double *regardless of how small
+    // the true (signed) magnitude is* — e.g. -100 would round-trip as 0.
+    // Working with the small magnitude directly avoids that cliff.
+    const inverted = new Array<number>(n);
+    let carry = 1;
+    for (let i = n - 1; i >= 0; i--) {
+      const sum = ((~rest[i]) & 0xff) + carry;
+      inverted[i] = sum & 0xff;
+      carry = sum > 0xff ? 1 : 0;
+    }
+    let magnitude = 0;
+    for (let i = 0; i < n; i++) magnitude = magnitude * 256 + inverted[i];
+    return -magnitude;
   }
 
   function readFloat(n: 4 | 8): number | null {
