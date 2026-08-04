@@ -6,7 +6,8 @@ import { PaymentDonut } from "@/components/dashboard/payment-donut";
 import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   buildRecentActivity,
   categoryDisplayLabel,
