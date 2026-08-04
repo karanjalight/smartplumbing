@@ -330,6 +330,15 @@ describe("summarizePaymentMethodMix", () => {
       { name: "M-Pesa", kes: 300, pct: 30 },
     ]);
   });
+
+  it("omits a method with zero completed KES while keeping others", () => {
+    const payments = [
+      paymentRow({ id: "p1", method: "M-Pesa", amount_kes: 500, created_at: "2026-03-01T09:00:00.000Z" }),
+      paymentRow({ id: "p2", method: "Cash", amount_kes: 0, created_at: "2026-03-02T09:00:00.000Z" }),
+    ];
+    const result = summarizePaymentMethodMix(payments, "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    expect(result).toEqual([{ name: "M-Pesa", kes: 500, pct: 100 }]);
+  });
 });
 
 describe("summarizeMonthlyRevenue", () => {

@@ -192,6 +192,7 @@ export function summarizePaymentMethodMix(
   const grandTotal = [...totals.values()].reduce((s, v) => s + v, 0);
   if (grandTotal === 0) return [];
   return [...totals.entries()]
+    .filter(([, amount]) => amount > 0)
     .map(([name, amount]) => ({ name, kes: amount, pct: Math.round((amount / grandTotal) * 100) }))
     .sort((a, b) => b.kes - a.kes);
 }
