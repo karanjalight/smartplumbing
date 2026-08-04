@@ -145,6 +145,13 @@ The schema is grouped into eight domains:
   `tenants.electricity_meter_id`, not just `tenants.meter_id` (previously
   electricity meters showed no tenant/unit in the admin/landlord Meters
   lists).
+- Electricity readings, electricity meters only: `latest_daily_consumption_kwh`,
+  `latest_balance_kwh`, `latest_voltage`, `power_failure_count` — pulled via LONGi's
+  Communication API Chapter 5 (`communicationwithdevice`, four OBIS registers) and
+  decoded from A-XDR by `lib/longi-vending.ts`'s `decodeAxdrValue()`. Written by
+  `lib/meter-readings.ts`'s `refreshMeterReadings()`, called alongside
+  `refreshMeterStatuses()` from the same `refreshMeterStatusesAction` server action —
+  one "Refresh status" click updates connectivity, relay state, and readings together.
 - The same migration added `electricity_meter_relay_state` and
   `electricity_meter_relay_state_at` to `tenant_directory`, so the relay's
   on/off state is visible alongside a tenant's electricity meter without an
