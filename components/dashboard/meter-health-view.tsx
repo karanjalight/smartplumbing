@@ -64,6 +64,7 @@ export function MeterHealthView({
     (r) => isElectricityMeter(r) && r.relayState === "disconnected"
   ).length;
   const attention = allRows.filter(needsAttention);
+  const electricityMeters = allRows.filter(isElectricityMeter);
 
   return (
     <div className="space-y-6">
@@ -159,6 +160,63 @@ export function MeterHealthView({
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm dark:border-border/80">
+        <div className="border-b border-border px-4 py-3 dark:border-border/80">
+          <p className="text-sm font-medium text-foreground">
+            Electricity meter readings ({electricityMeters.length})
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Consumption, balance, voltage, and power-failure counts from the last refresh.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead>
+              <tr className="bg-[#0A4266] text-white dark:bg-[#0d4d73]">
+                <th className="px-4 py-3 font-semibold">Meter</th>
+                <th className="px-4 py-3 font-semibold">Tenant</th>
+                <th className="px-4 py-3 font-semibold">Daily consumption</th>
+                <th className="px-4 py-3 font-semibold">Balance</th>
+                <th className="px-4 py-3 font-semibold">Voltage</th>
+                <th className="px-4 py-3 font-semibold">Power failures</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {electricityMeters.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                    No electricity meters yet.
+                  </td>
+                </tr>
+              ) : (
+                electricityMeters.map((row) => (
+                  <tr key={row.meterId} className="bg-card transition-colors hover:bg-muted/40">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">
+                      {row.meterId}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">{row.tenantName ?? "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-foreground">
+                      {row.dailyConsumptionKwh == null
+                        ? "—"
+                        : `${row.dailyConsumptionKwh.toLocaleString("en-KE")} kWh`}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-foreground">
+                      {row.balanceKwh == null ? "—" : `${row.balanceKwh.toLocaleString("en-KE")} kWh`}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-foreground">
+                      {row.voltage == null ? "—" : `${row.voltage.toLocaleString("en-KE")} V`}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-foreground">
+                      {row.powerFailureCount ?? "—"}
                     </td>
                   </tr>
                 ))
