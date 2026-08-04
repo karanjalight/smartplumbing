@@ -21,7 +21,8 @@ export async function POST(request: Request) {
 
   let body: {
     amount?: number; meterNo?: string; email?: string; customerName?: string;
-    purpose?: "rent" | "water-token-purchase"; tenantId?: string;
+    purpose?: "rent" | "water-token-purchase" | "deposit"; tenantId?: string;
+    kind?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -29,7 +30,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const purpose = body.purpose === "rent" ? "rent" : "water-token-purchase";
+  const purpose =
+    body.purpose === "rent"
+      ? "rent"
+      : body.purpose === "deposit"
+        ? "deposit"
+        : "water-token-purchase";
   const amountKes = Number(body.amount);
   const meterNo = String(body.meterNo ?? "").trim();
   const tenantId = String(body.tenantId ?? "").trim();
@@ -49,8 +55,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "A valid email address is required" }, { status: 400 });
   }
 
-  const refSuffix = purpose === "rent" ? tenantId.slice(-6) : meterNo.slice(-5);
-  const reference = `smartone-${purpose === "rent" ? "rent" : "token"}-${Date.now()}-${refSuffix}`;
+  const kind = String(body.kind ?? "").trim();
+  if (purpose === "deposit") {
+    if (!tenantId) {
+      return NextResponse.json({ ok: false, error: "Tenant is required for deposit payment" }, { status: 400 });
+    }
+    if (!["water", "electricity", "rent"].includes(kind)) {
+      return NextResponse.json({ ok: false, error: "A valid deposit kind is required" }, { status: 400 });
+    }
+  }
+
+  const refSuffix =
+    purpose === "water-token-purchase" ? meterNo.slice(-5) : tenantId.slice(-6);
+  const reference = `smartone-${
+    purpose === "rent" ? "rent" : purpose === "deposit" ? "deposit" : "token"
+  }-${Date.now()}-${refSuffix}`;
   const payload = {
     email,
     amount: Math.round(amountKes * 100),
@@ -60,7 +79,11 @@ export async function POST(request: Request) {
       purpose,
       amountKes,
       customerName,
-      ...(purpose === "rent" ? { tenantId } : { meterNo }),
+      ...(purpose === "water-token-purchase"
+        ? { meterNo }
+        : purpose === "deposit"
+          ? { tenantId, kind }
+          : { tenantId }),
     },
   };
 
