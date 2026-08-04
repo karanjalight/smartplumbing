@@ -5,7 +5,6 @@ import { resolveDepositVerification } from "@/lib/billing/deposit-verification";
 import { getActiveLeaseForTenant } from "@/lib/leases/queries";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import type { Json } from "@/lib/supabase/types";
 
 type PaystackVerifyResponse = {
   status: boolean;
