@@ -237,6 +237,10 @@ export type MeterRow = Timestamps & {
   relay_state_at: string | null;
   relay_last_action_by: string | null;
   relay_last_action_response: Json | null;
+  latest_daily_consumption_kwh: number | null;
+  latest_balance_kwh: number | null;
+  latest_voltage: number | null;
+  power_failure_count: number | null;
 }
 
 export type TenantRow = Timestamps & {
