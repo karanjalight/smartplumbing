@@ -9,6 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { HouseDialog } from "@/components/dashboard/house-dialog";
+import { UnitPricingConfig } from "@/components/dashboard/unit-pricing-config";
 import { Button } from "@/components/ui/button";
 import type { HouseUnitRow } from "@/lib/buildings-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -161,6 +162,16 @@ export function UnitDetailView({
               </p>
             )}
           </div>
+
+          <UnitPricingConfig
+            unitId={unit.id}
+            initial={{
+              rentKes: unit.rent_kes,
+              rentDepositKes: unit.rent_deposit_kes,
+              waterMeterDepositKes: unit.water_meter_deposit_kes,
+              electricityMeterDepositKes: unit.electricity_meter_deposit_kes,
+            }}
+          />
         </div>
 
         {/* Photos */}
