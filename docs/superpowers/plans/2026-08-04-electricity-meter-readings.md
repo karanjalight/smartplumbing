@@ -619,6 +619,17 @@ describe("mapMeterDirectoryToUiRow — reading fields", () => {
 });
 ```
 
+**Also fix the two PRE-EXISTING tests in the `describe("mapMeterDirectoryToUiRow — relay fields", ...)` block above this one** (added by an earlier feature, before these four columns existed). Both call `mapMeterDirectoryToUiRow({...})` with a full object literal that is now missing the four new required fields, so `npx tsc --noEmit` will fail on them otherwise. In EACH of those two object literals (the ones with `id: "m1"` and `id: "m2"`), add these four lines immediately after the existing `relay_last_action_response: null,` line:
+
+```ts
+      latest_daily_consumption_kwh: null,
+      latest_balance_kwh: null,
+      latest_voltage: null,
+      power_failure_count: null,
+```
+
+(`null` is correct for both — neither of those two pre-existing tests is about reading fields, so they should just satisfy the type with no reading data, same as how they already pass `sts_sgc: null, sts_ti: null,` for fields outside what they're testing.)
+
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run lib/meters-data.test.ts`
