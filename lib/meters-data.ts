@@ -43,6 +43,10 @@ export type MeterRow = {
   openAlerts: number;
   relayState: MeterRelayState;
   relayStateAt: string | null;
+  dailyConsumptionKwh: number | null;
+  balanceKwh: number | null;
+  voltage: number | null;
+  powerFailureCount: number | null;
 };
 
 type MeterMeta = Pick<
@@ -191,6 +195,11 @@ export function mapMeterDirectoryToUiRow(row: MeterDirectoryDbRow): MeterRow {
     openAlerts: row.open_alerts ?? 0,
     relayState: (row.relay_state ?? "unknown") as MeterRelayState,
     relayStateAt,
+    dailyConsumptionKwh:
+      row.latest_daily_consumption_kwh != null ? Number(row.latest_daily_consumption_kwh) : null,
+    balanceKwh: row.latest_balance_kwh != null ? Number(row.latest_balance_kwh) : null,
+    voltage: row.latest_voltage != null ? Number(row.latest_voltage) : null,
+    powerFailureCount: row.power_failure_count ?? null,
   };
 }
 
@@ -223,6 +232,10 @@ export function buildMeterRowFromTenant(
     openAlerts: meta.openAlerts ?? 0,
     relayState: "unknown",
     relayStateAt: null,
+    dailyConsumptionKwh: null,
+    balanceKwh: null,
+    voltage: null,
+    powerFailureCount: null,
   };
 }
 
@@ -257,6 +270,10 @@ const LOOSE_INVENTORY_METERS: MeterRow[] = [
     openAlerts: 0,
     relayState: "unknown",
     relayStateAt: null,
+    dailyConsumptionKwh: null,
+    balanceKwh: null,
+    voltage: null,
+    powerFailureCount: null,
   },
   {
     meterId: "0159000000992",
@@ -277,6 +294,10 @@ const LOOSE_INVENTORY_METERS: MeterRow[] = [
     openAlerts: 0,
     relayState: "unknown",
     relayStateAt: null,
+    dailyConsumptionKwh: null,
+    balanceKwh: null,
+    voltage: null,
+    powerFailureCount: null,
   },
   {
     meterId: "70000009993",
@@ -297,6 +318,10 @@ const LOOSE_INVENTORY_METERS: MeterRow[] = [
     openAlerts: 0,
     relayState: "unknown",
     relayStateAt: null,
+    dailyConsumptionKwh: null,
+    balanceKwh: null,
+    voltage: null,
+    powerFailureCount: null,
   },
 ];
 

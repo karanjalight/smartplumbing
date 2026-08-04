@@ -66,6 +66,10 @@ describe("mapMeterDirectoryToUiRow — relay fields", () => {
       notes: null,
       relay_last_action_by: null,
       relay_last_action_response: null,
+      latest_daily_consumption_kwh: null,
+      latest_balance_kwh: null,
+      latest_voltage: null,
+      power_failure_count: null,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
     });
@@ -101,10 +105,98 @@ describe("mapMeterDirectoryToUiRow — relay fields", () => {
       notes: null,
       relay_last_action_by: null,
       relay_last_action_response: null,
+      latest_daily_consumption_kwh: null,
+      latest_balance_kwh: null,
+      latest_voltage: null,
+      power_failure_count: null,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
     });
     expect(row.relayState).toBe("unknown");
     expect(row.relayStateAt).toBeNull();
+  });
+});
+
+describe("mapMeterDirectoryToUiRow — reading fields", () => {
+  it("carries the four electricity reading columns through to the UI row", () => {
+    const row = mapMeterDirectoryToUiRow({
+      id: "m1",
+      meter_no: "70000320005",
+      serial_number: null,
+      supplier: "LONGi",
+      model_type: "electricity_prepay_kwh",
+      lifecycle_status: "active",
+      connectivity_status: "online",
+      installed_on: "2026-01-01",
+      latest_reading_m3: null,
+      last_sync_at: null,
+      open_alerts: 0,
+      landlord_id: null,
+      landlord_company: null,
+      building_id: null,
+      building_name: null,
+      unit_id: null,
+      unit_label: null,
+      tenant_id: null,
+      tenant_name: null,
+      relay_state: "connected",
+      relay_state_at: null,
+      notes: null,
+      relay_last_action_by: null,
+      relay_last_action_response: null,
+      latest_daily_consumption_kwh: 12.4,
+      latest_balance_kwh: 38.2,
+      latest_voltage: 231.5,
+      power_failure_count: 2,
+      sts_sgc: null,
+      sts_ti: null,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    expect(row.dailyConsumptionKwh).toBe(12.4);
+    expect(row.balanceKwh).toBe(38.2);
+    expect(row.voltage).toBe(231.5);
+    expect(row.powerFailureCount).toBe(2);
+  });
+
+  it("defaults all four reading fields to null when the columns are missing", () => {
+    const row = mapMeterDirectoryToUiRow({
+      id: "m2",
+      meter_no: "0159000000641",
+      serial_number: null,
+      supplier: null,
+      model_type: "water_prepay_m3",
+      lifecycle_status: "active",
+      connectivity_status: "unknown",
+      installed_on: null,
+      latest_reading_m3: null,
+      last_sync_at: null,
+      open_alerts: 0,
+      landlord_id: null,
+      landlord_company: null,
+      building_id: null,
+      building_name: null,
+      unit_id: null,
+      unit_label: null,
+      tenant_id: null,
+      tenant_name: null,
+      relay_state: null as unknown as "unknown",
+      relay_state_at: null,
+      notes: null,
+      relay_last_action_by: null,
+      relay_last_action_response: null,
+      latest_daily_consumption_kwh: null,
+      latest_balance_kwh: null,
+      latest_voltage: null,
+      power_failure_count: null,
+      sts_sgc: null,
+      sts_ti: null,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    expect(row.dailyConsumptionKwh).toBeNull();
+    expect(row.balanceKwh).toBeNull();
+    expect(row.voltage).toBeNull();
+    expect(row.powerFailureCount).toBeNull();
   });
 });
