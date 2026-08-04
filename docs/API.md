@@ -541,6 +541,169 @@ GET http://ip:port/vendingservice/checktransaction?token=${token}&orderNo=${orde
 
 ---
 
+## Chapter 10. Relay Open
+
+Disconnect an electricity meter's relay (cuts power) — a "pulling" operation.
+
+### Endpoint
+
+```
+GET http://ip:port/vendingservice/relayOpen?token=${token}&deviceSN=${deviceSN}
+```
+
+### Request parameters
+
+| Name | Type | In | Description |
+|------|------|----|--------------|
+| token | `String` | Query | The session id, from `login` |
+| deviceSN | `String` | Query | Device (meter) number |
+
+### Response: ServiceBaseVo
+
+| Member | Type | Description |
+|--------|------|--------------|
+| errorCode | `int` | `0` on success |
+| errorMsg | `String` | Error message |
+| errorDetails | `object` | Present on some failures (`code`, `message`) |
+| data | `String` | `"Disconnected"` on success |
+
+### Example: success
+
+```json
+{
+  "errorCode": 0,
+  "errorMsg": null,
+  "errorDetails": null,
+  "data": "Disconnected",
+  "object": null
+}
+```
+
+### Example: failure
+
+```json
+{
+  "errorCode": 1003,
+  "errorMsg": "The session has expired",
+  "data": null
+}
+```
+
+### Possible error codes
+
+`0, 8000, 9001, 1003, 1011, 1004, 1006, 1007, 1008, 1009, 1010, 9023, 9035`
+
+---
+
+## Chapter 11. Relay Closed
+
+Reconnect an electricity meter's relay (restores power).
+
+### Endpoint
+
+```
+GET http://ip:port/vendingservice/relayClosed?token=${token}&deviceSN=${deviceSN}
+```
+
+### Request parameters
+
+| Name | Type | In | Description |
+|------|------|----|--------------|
+| token | `String` | Query | The session id, from `login` |
+| deviceSN | `String` | Query | Device (meter) number |
+
+### Response: ServiceBaseVo
+
+| Member | Type | Description |
+|--------|------|--------------|
+| errorCode | `int` | `0` on success |
+| errorMsg | `String` | Error message |
+| errorDetails | `object` | Present on some failures (`code`, `message`) |
+| data | `String` | `"Connected"` on success |
+
+### Example: success
+
+```json
+{
+  "errorCode": 0,
+  "errorMsg": null,
+  "errorDetails": null,
+  "data": "Connected",
+  "object": null
+}
+```
+
+### Example: failure
+
+```json
+{
+  "errorCode": 9035,
+  "errorMsg": "Relay operation failure",
+  "errorDetails": { "code": 106, "message": "Meter cover open disconnect" }
+}
+```
+
+### Possible error codes
+
+`0, 8000, 9001, 1003, 1011, 1004, 1006, 1007, 1008, 1009, 1010, 9023, 9035`
+
+---
+
+## Chapter 12. Get Meter Relay Status
+
+Gets one or more meters' relay (connected/disconnected) status.
+
+### Endpoint
+
+```
+POST http://ip:port/vendingservice/relayStatus
+```
+
+### Request body
+
+```json
+{ "token": "55f41a55b5f54ed5851b4eb3b882d7ff", "meterNo": "70000320005" }
+```
+
+| Name | Type | Description |
+|------|------|--------------|
+| token | `String` | The session id, from `login` |
+| meterNo | `String` | One meter number, or several joined with `,` |
+
+### Response
+
+| Member | Type | Description |
+|--------|------|--------------|
+| errorCode | `int` | `0` on success |
+| errorMsg | `String` | Error message |
+| data | `{ dataTmp: string }[]` | One entry per requested meter, **in request order** — not individually keyed by meter number |
+
+### Example: success
+
+```json
+{
+  "errorCode": 0,
+  "errorMsg": "SUCCESS",
+  "data": [{ "dataTmp": "Connected" }]
+}
+```
+
+### Example: failure
+
+```json
+{
+  "errorCode": 1003,
+  "errorMsg": "The session has expired",
+  "data": null
+}
+```
+
+### Possible error codes
+
+`0, 8000, 9001, 1003, 1011, 1004, 1006, 1007, 1008, 1009, 1010, 9023`
+
+---
+
 ## Chapter 13. Remote Write Token
 
 Write an STS token to the meter remotely instead of keying it in on the meter's keypad.
