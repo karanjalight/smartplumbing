@@ -109,6 +109,19 @@ function needsAttention(row: MeterRow) {
   );
 }
 
+function meterReadingDisplay(row: MeterRow): string {
+  if (!isElectricityMeter(row)) {
+    return row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m³`;
+  }
+  const parts = [
+    row.dailyConsumptionKwh != null
+      ? `${row.dailyConsumptionKwh.toLocaleString("en-KE")} kWh today`
+      : null,
+    row.balanceKwh != null ? `${row.balanceKwh.toLocaleString("en-KE")} kWh left` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
 export type LandlordMetersViewProps = {
   landlordId: string;
   /** Optional rows loaded on the server for first paint. */
@@ -469,7 +482,7 @@ export function LandlordMetersView({
                       </div>
                     </td>
                     <td className="px-4 py-3 tabular-nums text-foreground">
-                      {row.latestReadingM3 ?? "—"}
+                      {meterReadingDisplay(row)}
                     </td>
                     <td className="px-4 py-3">{meterStatusBadge(row.status)}</td>
                     <td className="px-4 py-3">{connectivityBadge(row.connectivity)}</td>
