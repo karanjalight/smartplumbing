@@ -45,7 +45,7 @@ export type MeterModelType =
   | "electricity_prepay_kwh"
   | "electricity_prepay_currency";
 export type PaymentMethod = "M-Pesa" | "Bank" | "Cash" | "STS credit" | "Card";
-export type PaymentCategory = "rent" | "tokens" | "service" | "shop";
+export type PaymentCategory = "rent" | "tokens" | "service" | "shop" | "deposit";
 export type PaymentStatus =
   | "pending"
   | "completed"
