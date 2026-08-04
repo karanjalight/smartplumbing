@@ -53,7 +53,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
           <YAxis
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
             axisLine={false}
-            tickFormatter={(v) => `Kes ${compactKes.format(v)}`}
+            tickFormatter={(v) => `KES ${compactKes.format(v)}`}
           />
           <Tooltip
             contentStyle={{

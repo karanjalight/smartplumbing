@@ -365,6 +365,11 @@ describe("summarizeMonthlyRevenue", () => {
     const result = summarizeMonthlyRevenue([], 2025, NOW);
     expect(result).toHaveLength(12);
   });
+
+  it("returns an empty array for a year strictly in the future", () => {
+    const result = summarizeMonthlyRevenue([], 2027, NOW);
+    expect(result).toEqual([]);
+  });
 });
 
 describe("summarizeCategoryDistribution", () => {

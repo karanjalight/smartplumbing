@@ -55,25 +55,7 @@ export default async function DashboardPage() {
     safeList(() => listMeters(supabase)),
   ]);
 
-  const activityCandidateTenantIds = [
-    ...payments.slice(0, 8).map((p) => p.tenant_id),
-    ...tokenPurchases.slice(0, 8).map((t) => t.tenant_id),
-  ].filter((id): id is string => Boolean(id));
-  const uniqueTenantIds = [...new Set(activityCandidateTenantIds)];
-
-  let tenantNamesById = new Map<string, string>();
-  if (uniqueTenantIds.length > 0) {
-    try {
-      const { data, error } = await supabase
-        .from("tenants")
-        .select("id, full_name")
-        .in("id", uniqueTenantIds);
-      if (error) throw error;
-      tenantNamesById = new Map((data ?? []).map((t) => [t.id, t.full_name]));
-    } catch {
-      tenantNamesById = new Map();
-    }
-  }
+  const tenantNamesById = new Map(tenants.map((t) => [t.id, t.full_name]));
 
   const now = new Date();
   const meterModelTypeById = new Map(meters.map((m) => [m.id, m.model_type]));

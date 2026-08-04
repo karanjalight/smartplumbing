@@ -31,7 +31,7 @@ export function MetricCards({ earnings, tokenSales }: MetricCardsProps) {
         </div>
         <div className="min-w-0 space-y-4 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Total Earnings
+            Earnings (This Month)
           </p>
           <p className="mt-1 text-3xl font-bold tracking-tight text-[#0A4266] dark:text-[#6BB4E8]">
             {earnings.value}
