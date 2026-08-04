@@ -9,6 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { HouseDialog } from "@/components/dashboard/house-dialog";
+import { TenantDepositConfig } from "@/components/dashboard/tenant-deposit-config";
 import { UnitPricingConfig } from "@/components/dashboard/unit-pricing-config";
 import { Button } from "@/components/ui/button";
 import type { HouseUnitRow } from "@/lib/buildings-data";
@@ -172,6 +173,29 @@ export function UnitDetailView({
               electricityMeterDepositKes: unit.electricity_meter_deposit_kes,
             }}
           />
+
+          {detail.tenantDeposit ? (
+            <TenantDepositConfig
+              tenantId={detail.tenantDeposit.id}
+              landlordId={detail.tenantDeposit.landlordId}
+              hasWaterMeter={detail.tenantDeposit.hasWaterMeter}
+              hasElectricityMeter={detail.tenantDeposit.hasElectricityMeter}
+              prices={{
+                waterMeterDepositKes: unit.water_meter_deposit_kes,
+                electricityMeterDepositKes: unit.electricity_meter_deposit_kes,
+                rentDepositKes: unit.rent_deposit_kes,
+              }}
+              initial={{
+                paysWaterDeposit: detail.tenantDeposit.paysWaterDeposit,
+                paysElectricityDeposit: detail.tenantDeposit.paysElectricityDeposit,
+                paysRentDeposit: detail.tenantDeposit.paysRentDeposit,
+              }}
+            />
+          ) : (
+            <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+              Assign a tenant to choose which deposits they pay.
+            </p>
+          )}
         </div>
 
         {/* Photos */}
