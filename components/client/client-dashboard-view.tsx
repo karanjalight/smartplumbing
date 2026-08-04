@@ -1,6 +1,7 @@
 import {
   CircleDollarSign,
   Droplets,
+  HandCoins,
   Search,
   Settings2,
   UserRound,
@@ -26,6 +27,12 @@ const DASHBOARD_ACTIONS = [
     subtitle: "Make rent payments on time",
     href: "/clients/rent",
     icon: CircleDollarSign,
+  },
+  {
+    title: "Deposits",
+    subtitle: "Pay your security deposits",
+    href: "/clients/deposits",
+    icon: HandCoins,
   },
   {
     title: "Services",
