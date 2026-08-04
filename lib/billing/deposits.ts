@@ -1,5 +1,10 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { insertLedgerEntries, refreshTenantBalance } from "@/lib/billing/queries";
 import type { LedgerEntryInsert } from "@/lib/billing/queries";
-import type { LedgerEntryRow } from "@/lib/supabase/types";
+import type { Database, LedgerEntryRow, PaymentMethod } from "@/lib/supabase/types";
+
+type Client = SupabaseClient<Database>;
 
 export type DepositKind = "water" | "electricity" | "rent";
 
@@ -111,4 +116,76 @@ export function summarizeDeposits(entries: LedgerEntryRow[]): DepositsSummary {
     totalPaid: perKind.reduce((s, k) => s + k.paid, 0),
     totalOutstanding: perKind.reduce((s, k) => s + k.outstanding, 0),
   };
+}
+
+/** Which deposit kinds already have a non-voided charge. Idempotency source. */
+export async function chargedDepositKinds(
+  client: Client,
+  tenantId: string,
+): Promise<DepositKind[]> {
+  const { data, error } = await client
+    .from("ledger_entries")
+    .select("reference")
+    .eq("tenant_id", tenantId)
+    .eq("category", "deposit")
+    .eq("direction", "debit")
+    .eq("voided", false);
+  if (error) throw error;
+  const kinds = new Set<DepositKind>();
+  for (const row of data ?? []) {
+    const kind = parseDepositKind(row.reference);
+    if (kind) kinds.add(kind);
+  }
+  return Array.from(kinds);
+}
+
+export type DepositPaymentParams = {
+  tenantId: string;
+  landlordId: string;
+  leaseId: string | null;
+  kind: DepositKind;
+  amountKes: number;
+  method: PaymentMethod;
+  reference?: string | null;
+};
+
+/** Manual deposit payment: a `payments` row + a ledger credit, then rebalance.
+ * No commission (deposits are a refundable holding). Mirrors recordRentPayment. */
+export async function recordDepositPayment(
+  client: Client,
+  params: DepositPaymentParams,
+): Promise<void> {
+  const { data: payment, error: payErr } = await client
+    .from("payments")
+    .insert({
+      tenant_id: params.tenantId,
+      landlord_id: params.landlordId,
+      amount_kes: params.amountKes,
+      method: params.method,
+      category: "deposit",
+      status: "completed",
+      reference: params.reference ?? null,
+      provider: null,
+      processed_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (payErr) throw payErr;
+
+  await insertLedgerEntries(client, [
+    {
+      tenant_id: params.tenantId,
+      lease_id: params.leaseId,
+      landlord_id: params.landlordId,
+      direction: "credit",
+      category: "payment",
+      amount_kes: params.amountKes,
+      description: `Deposit payment — ${params.kind}`,
+      reference: `deposit:${params.kind}`,
+      source: "manual",
+      payment_id: payment.id,
+    },
+  ]);
+
+  await refreshTenantBalance(client, params.tenantId);
 }
