@@ -123,6 +123,19 @@ function connectivityBadge(connectivity: MeterConnectivity) {
   );
 }
 
+function meterReadingDisplay(row: MeterRow): string {
+  if (!isElectricityMeter(row)) {
+    return row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m³`;
+  }
+  const parts = [
+    row.dailyConsumptionKwh != null
+      ? `${row.dailyConsumptionKwh.toLocaleString("en-KE")} kWh today`
+      : null,
+    row.balanceKwh != null ? `${row.balanceKwh.toLocaleString("en-KE")} kWh left` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
 function meterNeedsAttention(row: MeterRow): boolean {
   return (
     row.status === "fault" ||
@@ -693,9 +706,7 @@ export function MetersView() {
                     <td className="px-4 py-3 font-medium text-foreground">{meterTypeLabel(row.modelType)}</td>
                     <td className="px-4 py-3 tabular-nums text-foreground">{row.installedOn}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">
-                        {row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m³`}
-                      </div>
+                      <div className="font-medium text-foreground">{meterReadingDisplay(row)}</div>
                       <div className="text-xs text-muted-foreground">Last sync {row.lastSyncAt}</div>
                     </td>
                     <td className="px-4 py-3">{connectivityBadge(row.connectivity)}</td>
