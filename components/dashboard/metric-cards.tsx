@@ -1,4 +1,4 @@
-import { DollarSign, FileClock } from "lucide-react";
+import { DollarSign, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -8,7 +8,7 @@ interface MetricCardsProps {
     change: string;
     footer?: string;
   };
-  invoiceBilling: {
+  tokenSales: {
     value: string;
     progress: number;
     leftLabel: string;
@@ -16,7 +16,7 @@ interface MetricCardsProps {
   };
 }
 
-export function MetricCards({ earnings, invoiceBilling }: MetricCardsProps) {
+export function MetricCards({ earnings, tokenSales }: MetricCardsProps) {
   return (
     <div
       className={cn(
@@ -45,35 +45,35 @@ export function MetricCards({ earnings, invoiceBilling }: MetricCardsProps) {
         </div>
       </div>
 
-      {/* Right: Invoice & Billing */}
+      {/* Right: Token Sales */}
       <div className="group flex min-w-0 flex-1 items-center gap-4 p-6 transition-colors hover:bg-muted/30">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted/80 text-foreground dark:bg-muted/50">
-          <FileClock className="size-16" aria-hidden />
+          <Zap className="size-16" aria-hidden />
         </div>
         <div className="min-w-0 space-y-4 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Invoice & Billing
+            Token Sales (This Month)
           </p>
           <p className="mt-1 text-2xl font-bold tracking-tight text-[#0A4266] dark:text-[#6BB4E8]">
-            {invoiceBilling.value}
+            {tokenSales.value}
           </p>
           <div className="mt-3">
             <div
               className="h-2 overflow-hidden rounded-full bg-muted/80"
               role="progressbar"
-              aria-valuenow={invoiceBilling.progress}
+              aria-valuenow={tokenSales.progress}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label={`Invoice & Billing: ${invoiceBilling.progress}% complete`}
+              aria-label={`Token Sales: ${tokenSales.progress}% delivered`}
             >
               <div
                 className="h-full rounded-full bg-[#0A4266]/60 transition-all dark:bg-[#6BB4E8]/70"
-                style={{ width: `${invoiceBilling.progress}%` }}
+                style={{ width: `${tokenSales.progress}%` }}
               />
             </div>
             <div className="mt-1.5 flex justify-between text-xs text-muted-foreground">
-              <span>{invoiceBilling.leftLabel}</span>
-              <span>{invoiceBilling.rightLabel}</span>
+              <span>{tokenSales.leftLabel}</span>
+              <span>{tokenSales.rightLabel}</span>
             </div>
           </div>
         </div>
