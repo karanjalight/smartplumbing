@@ -37,7 +37,7 @@ type MeterOwnership = { landlordId: string | null; buildingLandlordId: string | 
  * building (or an unowned building) is NOT owned by anyone — never fall
  * through to "no owner recorded, so allow it" for a landlord actor.
  */
-function isMeterOwnedByLandlord(landlordId: string, meter: MeterOwnership): boolean {
+export function isMeterOwnedByLandlord(landlordId: string, meter: MeterOwnership): boolean {
   if (meter.landlordId !== null) return meter.landlordId === landlordId;
   return meter.buildingLandlordId !== null && meter.buildingLandlordId === landlordId;
 }
