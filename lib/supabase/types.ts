@@ -188,6 +188,9 @@ export type UnitRow = Timestamps & {
   rent_kes: number | null;
   is_vacant: boolean;
   unit_type: UnitType | null;
+  water_meter_deposit_kes: number | null;
+  electricity_meter_deposit_kes: number | null;
+  rent_deposit_kes: number | null;
 }
 
 export type UnitImageRow = {
