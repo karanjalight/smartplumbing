@@ -9,6 +9,7 @@ import {
   type RelayActor,
   type RelayResult,
 } from "@/lib/meter-relay";
+import { refreshMeterReadings, type MeterReadingUpdate } from "@/lib/meter-readings";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 async function resolveActor(): Promise<
@@ -73,13 +74,36 @@ export async function setMeterRelay(
   return result;
 }
 
+export type CombinedMeterUpdate = MeterStatusUpdate & Omit<MeterReadingUpdate, "meterNo">;
+
 export async function refreshMeterStatusesAction(
   meterNos: string[]
-): Promise<{ ok: true; updated: MeterStatusUpdate[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; updated: CombinedMeterUpdate[] } | { ok: false; error: string }> {
   const resolved = await resolveActor();
   if (!resolved.ok) return { ok: false, error: resolved.error };
 
-  const result = await refreshMeterStatuses(resolved.actor, meterNos);
-  if (result.ok) revalidateMeterPages();
-  return result;
+  const [statusResult, readingsResult] = await Promise.all([
+    refreshMeterStatuses(resolved.actor, meterNos),
+    refreshMeterReadings(resolved.actor, meterNos),
+  ]);
+
+  if (!statusResult.ok) return { ok: false, error: statusResult.error };
+
+  const readingsByMeter = new Map(
+    readingsResult.ok ? readingsResult.updated.map((r) => [r.meterNo, r] as const) : []
+  );
+
+  const combined: CombinedMeterUpdate[] = statusResult.updated.map((s) => {
+    const r = readingsByMeter.get(s.meterNo);
+    return {
+      ...s,
+      dailyConsumptionKwh: r?.dailyConsumptionKwh ?? null,
+      balanceKwh: r?.balanceKwh ?? null,
+      voltage: r?.voltage ?? null,
+      powerFailureCount: r?.powerFailureCount ?? null,
+    };
+  });
+
+  revalidateMeterPages();
+  return { ok: true, updated: combined };
 }
