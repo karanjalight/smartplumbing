@@ -768,4 +768,96 @@ GET http://ip:port/vendingservice/writeToken?token=${token}&msno=${meterNo}&stst
 
 ---
 
+## Communication API — Chapter 5. Remote Communication
+
+*(This chapter comes from a separate vendor PDF, "LONGiPower Communication API," not
+the Vending API document above — its chapter numbers restart there. Included here for
+completeness since `lib/longi-vending.ts` calls it against the same base URL as
+everything else in this file.)*
+
+Read or write a single OBIS register on a device.
+
+### Endpoint
+
+```
+GET http://ip:port/vendingservice/communicationwithdevice?token=${token}&deviceSN=${deviceSN}&operationType=${operationType}&readCondition=${readCondition}&dataItem=${dataItem}&data=${data}
+```
+
+### Request parameters
+
+| Name | Type | Description |
+|------|------|--------------|
+| token | `String` | The session id, from `login` |
+| deviceSN | `String` | Meter/DCU serial number |
+| operationType | `Integer` | `1`=Read, `2`=Write, `5`=Action |
+| readCondition | `String` | Only used for buffer reads (class id 7); omitted for everything else |
+| dataItem | `String` | Hex OBIS code: Classid+LN+attributeId/methodId, e.g. `00030100010800FF02` |
+| data | `String` | A-XDR-encoded value to write; omitted for reads |
+
+### Response: ServiceBaseVo\CommunicationResponse
+
+| Member | Type | Description |
+|--------|------|--------------|
+| data | `String` | A-XDR-encoded hex value (see Table 1 below) |
+
+### Example: success
+
+```json
+{
+  "errorCode": 0,
+  "errorMsg": "",
+  "data": "0A0D30313539303030363738343337"
+}
+```
+
+### Example: failure
+
+```json
+{
+  "errorCode": 1003,
+  "errorMsg": "The session has expired"
+}
+```
+
+### Possible error codes
+
+`1003, 9020, 9021, 9022, 9023`
+
+### Table 1: A-XDR Data Type
+
+| Data Type | Tag | Sized (bytes) | Example value | A-XDR hex |
+|---|---|---|---|---|
+| null | 0 | 1 | null | `00` |
+| boolean | 3 | 1 | True / False | `03 01` / `03 00` |
+| double-long | 5 | 4 | -100 | `05 FF FF FF 9C` |
+| double-long-unsigned | 6 | 4 | 100 | `06 00 00 00 64` |
+| octet-string | 9 | unsized | `05060708` | `09 04 05 06 07 08` |
+| visible-string | 10 | unsized | Hello | `0A 05 48 65 6C 6C 6F` |
+| integer | 15 | 1 | -100 | `0F 9C` |
+| long | 16 | 2 | -100 | `10 FF 9C` |
+| unsigned | 17 | 1 | 100 | `11 64` |
+| long-unsigned | 18 | 2 | 100 | `12 00 64` |
+| long64 | 20 | 8 | -100 | `14 FF FF FF FF FF FF FF 9C` |
+| long64-unsigned | 21 | 8 | 100 | `15 00 00 00 00 00 00 00 64` |
+| enum | 22 | 1 | 1 | `16 01` |
+| float32 | 23 | 4 | 100.55 | `17 42 C9 19 9A` |
+| float64 | 24 | 8 | 100.55 | `18 40 59 23 33 33 33 33 33` |
+
+Code follows TLV rules: Tag + Length + Value; if the type is "sized," the length byte
+is omitted (the value's byte count is fixed by the type). `lib/longi-vending.ts`'s
+`decodeAxdrValue()` implements this table for the types above only — `date-time`,
+`date`, `time`, `array`, and `structure` are not implemented (not needed for scalar
+meter readings) and decode to `{ type: "unsupported", tag }`.
+
+### OBIS codes used for electricity meter readings
+
+| Name | OBIS (hex) |
+|---|---|
+| Daily consumption kWh | `00030100011E00FF02` |
+| Balance (kWh) | `00030000603C00FF02` |
+| Related voltage | `00030100000600FF02` |
+| Counter of power failures | `00010000600715FF02` |
+
+---
+
 *LONGI METER CO. LTD — No.25 Guangming Road, Yinchuan, 750021, China — overseas@longimeter.com — www.longimeter.com*
