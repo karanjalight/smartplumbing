@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { TenantLedger } from "@/components/billing/tenant-ledger";
 import { TenantDetailView } from "@/components/dashboard/tenant-detail-view";
 import { buildStatement, listLedgerForTenant, type Statement } from "@/lib/billing/queries";
+import { summarizeDeposits, type DepositsSummary } from "@/lib/billing/deposits";
 import { getActiveLeaseForTenant } from "@/lib/leases/queries";
 import {
   fetchTenantDetailById,
@@ -43,6 +44,16 @@ async function resolveStatement(id: string): Promise<Statement | null> {
   }
 }
 
+async function resolveDepositsSummary(id: string): Promise<DepositsSummary | null> {
+  try {
+    const supabase = await getSupabaseServerClient();
+    const entries = await listLedgerForTenant(supabase, id);
+    return summarizeDeposits(entries);
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const tenant = await resolveTenant(id);
@@ -60,6 +71,7 @@ export default async function TenantDetailPage({ params }: Props) {
   if (!tenant) notFound();
   const lease = await resolveActiveLease(id);
   const statement = await resolveStatement(id);
+  const depositsSummary = await resolveDepositsSummary(id);
   return (
     <>
       {lease && (
@@ -72,7 +84,7 @@ export default async function TenantDetailPage({ params }: Props) {
           </Link>
         </div>
       )}
-      <TenantDetailView tenant={tenant} />
+      <TenantDetailView tenant={tenant} depositsSummary={depositsSummary} />
       {statement && (
         <section className="space-y-4 p-4 md:p-6">
           <h2 className="text-lg font-semibold tracking-tight text-foreground">
