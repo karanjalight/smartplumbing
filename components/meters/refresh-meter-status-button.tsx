@@ -32,7 +32,13 @@ export function RefreshMeterStatusButton({
         return;
       }
       const succeeded = result.updated.filter(
-        (u) => u.connectivity !== null || u.relayState !== null
+        (u) =>
+          u.connectivity !== null ||
+          u.relayState !== null ||
+          u.dailyConsumptionKwh !== null ||
+          u.balanceKwh !== null ||
+          u.voltage !== null ||
+          u.powerFailureCount !== null
       ).length;
       const total = result.updated.length;
       if (total === 0) {
