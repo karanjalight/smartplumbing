@@ -49,10 +49,12 @@ export type TenantDetailExtras = {
   depositAmountPaid: number | null;
   hasWaterMeter: boolean;
   hasElectricityMeter: boolean;
-  waterDepositRequired: boolean;
-  waterDepositAmount: number | null;
-  electricityDepositRequired: boolean;
-  electricityDepositAmount: number | null;
+  paysWaterDeposit: boolean;
+  paysElectricityDeposit: boolean;
+  paysRentDeposit: boolean;
+  waterMeterDepositKes: number | null;
+  electricityMeterDepositKes: number | null;
+  rentDepositKes: number | null;
   leaseStatus: "none" | "draft" | "pending_signature" | "active";
   tenantSignedLease: boolean;
   secondaryPhones: string | null;
@@ -573,7 +575,11 @@ export async function fetchTenantDetailById(
           .maybeSingle()
       : Promise.resolve({ data: null }),
     row.unit_id
-      ? client.from("units").select("label").eq("id", row.unit_id).maybeSingle()
+      ? client
+          .from("units")
+          .select("label, rent_deposit_kes, water_meter_deposit_kes, electricity_meter_deposit_kes")
+          .eq("id", row.unit_id)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
     row.meter_id
       ? client.from("meters").select("meter_no, relay_state").eq("id", row.meter_id).maybeSingle()
@@ -651,13 +657,20 @@ export async function fetchTenantDetailById(
         : null,
     hasWaterMeter: row.meter_id != null,
     hasElectricityMeter: row.electricity_meter_id != null,
-    waterDepositRequired: row.water_deposit_required,
-    waterDepositAmount:
-      row.water_deposit_amount != null ? Number(row.water_deposit_amount) : null,
-    electricityDepositRequired: row.electricity_deposit_required,
-    electricityDepositAmount:
-      row.electricity_deposit_amount != null
-        ? Number(row.electricity_deposit_amount)
+    paysWaterDeposit: row.pays_water_deposit,
+    paysElectricityDeposit: row.pays_electricity_deposit,
+    paysRentDeposit: row.pays_rent_deposit,
+    waterMeterDepositKes:
+      unitRes.data?.water_meter_deposit_kes != null
+        ? Number(unitRes.data.water_meter_deposit_kes)
+        : null,
+    electricityMeterDepositKes:
+      unitRes.data?.electricity_meter_deposit_kes != null
+        ? Number(unitRes.data.electricity_meter_deposit_kes)
+        : null,
+    rentDepositKes:
+      unitRes.data?.rent_deposit_kes != null
+        ? Number(unitRes.data.rent_deposit_kes)
         : null,
     leaseStatus,
     tenantSignedLease,
@@ -771,10 +784,12 @@ const DEFAULT_EXTRAS: TenantDetailExtras = {
   depositAmountPaid: null,
   hasWaterMeter: false,
   hasElectricityMeter: false,
-  waterDepositRequired: false,
-  waterDepositAmount: null,
-  electricityDepositRequired: false,
-  electricityDepositAmount: null,
+  paysWaterDeposit: true,
+  paysElectricityDeposit: true,
+  paysRentDeposit: true,
+  waterMeterDepositKes: null,
+  electricityMeterDepositKes: null,
+  rentDepositKes: null,
   leaseStatus: "none",
   tenantSignedLease: false,
   secondaryPhones: null,

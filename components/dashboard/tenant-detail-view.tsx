@@ -133,10 +133,12 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
     unitId: tenant.houseUnitId ?? null,
     hasWaterMeter: tenant.hasWaterMeter,
     hasElectricityMeter: tenant.hasElectricityMeter,
-    waterDepositRequired: tenant.waterDepositRequired,
-    waterDepositAmount: tenant.waterDepositAmount,
-    electricityDepositRequired: tenant.electricityDepositRequired,
-    electricityDepositAmount: tenant.electricityDepositAmount,
+    paysWaterDeposit: tenant.paysWaterDeposit,
+    paysElectricityDeposit: tenant.paysElectricityDeposit,
+    paysRentDeposit: tenant.paysRentDeposit,
+    waterMeterDepositKes: tenant.waterMeterDepositKes,
+    electricityMeterDepositKes: tenant.electricityMeterDepositKes,
+    rentDepositKes: tenant.rentDepositKes,
     leaseStatus: tenant.leaseStatus,
     tenantSignedLease: tenant.tenantSignedLease,
   });
@@ -180,11 +182,15 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
             landlordId={tenant.landlordId}
             hasWaterMeter={tenant.hasWaterMeter}
             hasElectricityMeter={tenant.hasElectricityMeter}
+            prices={{
+              waterMeterDepositKes: tenant.waterMeterDepositKes,
+              electricityMeterDepositKes: tenant.electricityMeterDepositKes,
+              rentDepositKes: tenant.rentDepositKes,
+            }}
             initial={{
-              waterDepositRequired: tenant.waterDepositRequired,
-              waterDepositAmount: tenant.waterDepositAmount,
-              electricityDepositRequired: tenant.electricityDepositRequired,
-              electricityDepositAmount: tenant.electricityDepositAmount,
+              paysWaterDeposit: tenant.paysWaterDeposit,
+              paysElectricityDeposit: tenant.paysElectricityDeposit,
+              paysRentDeposit: tenant.paysRentDeposit,
             }}
           />
 

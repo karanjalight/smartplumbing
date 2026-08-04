@@ -13,10 +13,12 @@ function base(overrides: Partial<SetupProgressInput> = {}): SetupProgressInput {
     unitId: null,
     hasWaterMeter: false,
     hasElectricityMeter: false,
-    waterDepositRequired: false,
-    waterDepositAmount: null,
-    electricityDepositRequired: false,
-    electricityDepositAmount: null,
+    paysWaterDeposit: true,
+    paysElectricityDeposit: true,
+    paysRentDeposit: true,
+    waterMeterDepositKes: null,
+    electricityMeterDepositKes: null,
+    rentDepositKes: null,
     leaseStatus: "none",
     tenantSignedLease: false,
     ...overrides,
@@ -62,51 +64,48 @@ describe("computeTenantSetupProgress", () => {
     ).toBe(true);
   });
 
-  it("deposits step is false when no meter is assigned", () => {
+  it("deposits step is false with no unit assigned", () => {
     expect(
-      computeTenantSetupProgress(base()).steps.find((s) => s.key === "deposits")
-        ?.done,
+      computeTenantSetupProgress(base({ unitId: null })).steps.find((s) => s.key === "deposits")?.done,
     ).toBe(false);
   });
 
-  it("deposits done when assigned meter is not required", () => {
+  it("deposits done when a paid rent deposit has a price and no meters", () => {
     expect(
       computeTenantSetupProgress(
-        base({ hasWaterMeter: true, waterDepositRequired: false }),
+        base({ unitId: "u1", paysRentDeposit: true, rentDepositKes: 20000 }),
       ).steps.find((s) => s.key === "deposits")?.done,
     ).toBe(true);
   });
 
-  it("deposits not done when required but amount missing or non-positive", () => {
+  it("deposits not done when a paid deposit has no unit price", () => {
     expect(
       computeTenantSetupProgress(
-        base({ hasWaterMeter: true, waterDepositRequired: true, waterDepositAmount: null }),
-      ).steps.find((s) => s.key === "deposits")?.done,
-    ).toBe(false);
-    expect(
-      computeTenantSetupProgress(
-        base({ hasWaterMeter: true, waterDepositRequired: true, waterDepositAmount: 0 }),
+        base({ unitId: "u1", paysRentDeposit: true, rentDepositKes: null }),
       ).steps.find((s) => s.key === "deposits")?.done,
     ).toBe(false);
   });
 
-  it("deposits done when required with a positive amount", () => {
+  it("deposits done when the unpriced deposit is waived", () => {
     expect(
       computeTenantSetupProgress(
-        base({ hasWaterMeter: true, waterDepositRequired: true, waterDepositAmount: 5000 }),
+        base({ unitId: "u1", paysRentDeposit: false, rentDepositKes: null }),
       ).steps.find((s) => s.key === "deposits")?.done,
     ).toBe(true);
   });
 
-  it("requires every assigned meter to be configured", () => {
-    // water not required (ok) but electricity required with no amount (not ok)
+  it("requires every assigned meter's paid deposit to be priced", () => {
     expect(
       computeTenantSetupProgress(
         base({
+          unitId: "u1",
           hasWaterMeter: true,
           hasElectricityMeter: true,
-          electricityDepositRequired: true,
-          electricityDepositAmount: null,
+          paysWaterDeposit: true,
+          waterMeterDepositKes: 5000,
+          paysElectricityDeposit: true,
+          electricityMeterDepositKes: null,
+          paysRentDeposit: false,
         }),
       ).steps.find((s) => s.key === "deposits")?.done,
     ).toBe(false);
@@ -137,8 +136,9 @@ describe("computeTenantSetupProgress", () => {
         phone: "0700",
         unitId: "u1",
         hasWaterMeter: true,
-        waterDepositRequired: true,
-        waterDepositAmount: 5000,
+        waterMeterDepositKes: 5000,
+        paysRentDeposit: true,
+        rentDepositKes: 20000,
         leaseStatus: "active",
       }),
     );

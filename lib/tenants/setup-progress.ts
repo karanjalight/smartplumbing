@@ -20,10 +20,12 @@ export type SetupProgressInput = {
   unitId: string | null;
   hasWaterMeter: boolean;
   hasElectricityMeter: boolean;
-  waterDepositRequired: boolean;
-  waterDepositAmount: number | null;
-  electricityDepositRequired: boolean;
-  electricityDepositAmount: number | null;
+  paysWaterDeposit: boolean;
+  paysElectricityDeposit: boolean;
+  paysRentDeposit: boolean;
+  waterMeterDepositKes: number | null;
+  electricityMeterDepositKes: number | null;
+  rentDepositKes: number | null;
   leaseStatus: "none" | "draft" | "pending_signature" | "active";
   tenantSignedLease: boolean;
 };
@@ -32,30 +34,23 @@ function nonEmpty(value: string | null): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-/** A single assigned meter is "configured" if no deposit is required, or a
- * positive amount is set when one is. */
-function meterConfigured(required: boolean, amount: number | null): boolean {
-  if (!required) return true;
-  return typeof amount === "number" && amount > 0;
+/** A deposit the tenant pays needs a known unit price; waived deposits are fine. */
+function priced(pays: boolean, price: number | null): boolean {
+  return !pays || (typeof price === "number" && price >= 0);
 }
 
 function depositsDone(input: SetupProgressInput): boolean {
-  if (!input.hasWaterMeter && !input.hasElectricityMeter) return false;
-  if (
-    input.hasWaterMeter &&
-    !meterConfigured(input.waterDepositRequired, input.waterDepositAmount)
-  ) {
+  if (!input.unitId) return false;
+  if (input.hasWaterMeter && !priced(input.paysWaterDeposit, input.waterMeterDepositKes)) {
     return false;
   }
   if (
     input.hasElectricityMeter &&
-    !meterConfigured(
-      input.electricityDepositRequired,
-      input.electricityDepositAmount,
-    )
+    !priced(input.paysElectricityDeposit, input.electricityMeterDepositKes)
   ) {
     return false;
   }
+  if (!priced(input.paysRentDeposit, input.rentDepositKes)) return false;
   return true;
 }
 

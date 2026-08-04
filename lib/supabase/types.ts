@@ -265,10 +265,9 @@ export type TenantRow = Timestamps & {
   national_id: string | null;
   kra_pin: string | null;
   deposit_amount_paid: number | null;
-  water_deposit_required: boolean;
-  water_deposit_amount: number | null;
-  electricity_deposit_required: boolean;
-  electricity_deposit_amount: number | null;
+  pays_water_deposit: boolean;
+  pays_electricity_deposit: boolean;
+  pays_rent_deposit: boolean;
   secondary_phones: string | null;
 }
 

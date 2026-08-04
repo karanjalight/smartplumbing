@@ -98,10 +98,9 @@ const deleteTenantSchema = z.object({
 const updateTenantDepositsSchema = z.object({
   tenantId: uuidSchema,
   landlordId: z.string().min(1, "Landlord is required."),
-  waterDepositRequired: z.boolean(),
-  waterDepositAmount: z.number().nonnegative().nullable(),
-  electricityDepositRequired: z.boolean(),
-  electricityDepositAmount: z.number().nonnegative().nullable(),
+  paysWaterDeposit: z.boolean(),
+  paysElectricityDeposit: z.boolean(),
+  paysRentDeposit: z.boolean(),
 });
 
 export type CreateTenantAccountResult =
@@ -952,14 +951,8 @@ export async function updateTenantDeposits(input: unknown): Promise<ActionResult
     return { ok: false, error: msg };
   }
 
-  const {
-    tenantId,
-    landlordId,
-    waterDepositRequired,
-    waterDepositAmount,
-    electricityDepositRequired,
-    electricityDepositAmount,
-  } = parsed.data;
+  const { tenantId, landlordId, paysWaterDeposit, paysElectricityDeposit, paysRentDeposit } =
+    parsed.data;
 
   const actor = await assertPortfolioActor(landlordId);
   if (!actor.ok) {
@@ -981,12 +974,9 @@ export async function updateTenantDeposits(input: unknown): Promise<ActionResult
   const { error: updateErr } = await admin
     .from("tenants")
     .update({
-      water_deposit_required: waterDepositRequired,
-      water_deposit_amount: waterDepositRequired ? waterDepositAmount : null,
-      electricity_deposit_required: electricityDepositRequired,
-      electricity_deposit_amount: electricityDepositRequired
-        ? electricityDepositAmount
-        : null,
+      pays_water_deposit: paysWaterDeposit,
+      pays_electricity_deposit: paysElectricityDeposit,
+      pays_rent_deposit: paysRentDeposit,
     })
     .eq("id", tenantId);
   if (updateErr) return { ok: false, error: updateErr.message };
