@@ -7,58 +7,66 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-const cards = [
-  {
-    title: "Total Meters",
-    value: "1,247",
-    subtext: "+12% from last month",
-    subtextPositive: true,
-    icon: Gauge,
-    trendIcon: TrendingUp,
-    href: "/dashboard/meters",
-    actionLabel: "Manage Meters",
-    bgClass: "bg-amber-50 dark:bg-amber-950/30",
-    iconBgClass: "bg-amber-200/60 dark:bg-amber-800/40",
-  },
-  {
-    title: "Active Tenants",
-    value: "2,845",
-    subtext: "+8% from last month",
-    subtextPositive: true,
-    icon: Users,
-    trendIcon: TrendingUp,
-    href: "/dashboard/tenants",
-    actionLabel: "View Tenants",
-    bgClass: "bg-violet-50 dark:bg-violet-950/30",
-    iconBgClass: "bg-violet-200/60 dark:bg-violet-800/40",
-  },
-  {
-    title: "Total Revenue",
-    value: "KES 4.2M",
-    subtext: "+15% from last month",
-    subtextPositive: true,
-    icon: Wallet,
-    trendIcon: TrendingUp,
-    href: "/dashboard/payments",
-    actionLabel: "View Payments",
-    bgClass: "bg-rose-50 dark:bg-rose-950/30",
-    iconBgClass: "bg-rose-200/60 dark:bg-rose-800/40",
-  },
-  {
-    title: "Alerts Today",
-    value: "23",
-    subtext: "5 require attention",
-    subtextPositive: false,
-    icon: AlertTriangle,
-    trendIcon: AlertTriangle,
-    href: "/dashboard/meter-health",
-    actionLabel: "Check Meter Health",
-    bgClass: "bg-sky-50 dark:bg-sky-950/30",
-    iconBgClass: "bg-sky-200/60 dark:bg-sky-800/40",
-  },
-];
+import { formatMomChangeLabel, type DashboardSummary } from "@/lib/dashboard-overview-data";
+import { formatKes } from "@/lib/tenants-data";
 
-export function SummaryCards() {
+type SummaryCardsProps = { summary: DashboardSummary };
+
+export function SummaryCards({ summary }: SummaryCardsProps) {
+  const revenuePositive = summary.revenue.momChangePct !== null && summary.revenue.momChangePct >= 0;
+  const revenueChangeLabel = formatMomChangeLabel(summary.revenue.momChangePct);
+
+  const cards = [
+    {
+      title: "Total Meters",
+      value: summary.meters.total.toLocaleString("en-KE"),
+      subtext: `${summary.meters.online} online · ${summary.meters.offline} offline`,
+      subtextPositive: false,
+      icon: Gauge,
+      trendIcon: TrendingUp,
+      href: "/dashboard/meters",
+      actionLabel: "Manage Meters",
+      bgClass: "bg-amber-50 dark:bg-amber-950/30",
+      iconBgClass: "bg-amber-200/60 dark:bg-amber-800/40",
+    },
+    {
+      title: "Active Tenants",
+      value: summary.tenants.active.toLocaleString("en-KE"),
+      subtext: `${summary.tenants.overdue} overdue · ${summary.tenants.lowCredit} low credit`,
+      subtextPositive: false,
+      icon: Users,
+      trendIcon: TrendingUp,
+      href: "/dashboard/tenants",
+      actionLabel: "View Tenants",
+      bgClass: "bg-violet-50 dark:bg-violet-950/30",
+      iconBgClass: "bg-violet-200/60 dark:bg-violet-800/40",
+    },
+    {
+      title: "Total Revenue",
+      value: formatKes(summary.revenue.allTimeCompletedKes),
+      subtext: revenueChangeLabel,
+      subtextPositive: revenuePositive,
+      icon: Wallet,
+      trendIcon: TrendingUp,
+      href: "/dashboard/payments",
+      actionLabel: "View Payments",
+      bgClass: "bg-rose-50 dark:bg-rose-950/30",
+      iconBgClass: "bg-rose-200/60 dark:bg-rose-800/40",
+    },
+    {
+      title: "Alerts",
+      value: summary.alerts.openAlertsTotal.toLocaleString("en-KE"),
+      subtext: `${summary.alerts.metersWithAlerts} meters need attention`,
+      subtextPositive: false,
+      icon: AlertTriangle,
+      trendIcon: AlertTriangle,
+      href: "/dashboard/meter-health",
+      actionLabel: "Check Meter Health",
+      bgClass: "bg-sky-50 dark:bg-sky-950/30",
+      iconBgClass: "bg-sky-200/60 dark:bg-sky-800/40",
+    },
+  ];
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {cards.map((card) => {
