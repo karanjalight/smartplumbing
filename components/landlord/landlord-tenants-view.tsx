@@ -19,6 +19,7 @@ import {
   updateTenantRecord,
 } from "@/app/(dashboard)/dashboard/tenants/actions";
 import { TenantStatusBadge } from "@/components/dashboard/tenant-status-badge";
+import { MeterRelayToggle } from "@/components/meters/meter-relay-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -738,6 +739,14 @@ export function LandlordTenantsView({ landlordId }: { landlordId: string }) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
+                        {row.electricityMeterId && row.electricityMeterId !== "—" ? (
+                          <MeterRelayToggle
+                            key={`${row.id}-${row.electricityMeterRelayState}`}
+                            meterNo={row.electricityMeterId}
+                            relayState={row.electricityMeterRelayState ?? "unknown"}
+                            compact
+                          />
+                        ) : null}
                         <Link
                           href={`/landlords/dashboard/tenants/${row.id}`}
                           className={cn(

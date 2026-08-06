@@ -42,3 +42,6 @@ next-env.d.ts
 
 # git worktrees
 .worktrees/
+
+# subagent-driven-development scratch (briefs, reports, review diffs, ledger)
+.superpowers/

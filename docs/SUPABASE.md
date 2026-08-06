@@ -125,8 +125,37 @@ The schema is grouped into eight domains:
 
 - `meters` — LONGi-aware: `meter_no` (natural ID), `model_type`
   (`water_prepay_m3` ↔ LONGi `meterType=1`, `water_prepay_currency=5`,
-  `postpay=-1`), `lifecycle_status`, `connectivity_status`, STS `sgc`/`ti`,
-  cached `latest_reading_m3`, `last_sync_at`.
+  `postpay=-1`, `electricity_prepay_kwh=0`, `electricity_prepay_currency=4`),
+  `lifecycle_status`, `connectivity_status`, STS `sgc`/`ti`, cached
+  `latest_reading_m3`, `last_sync_at`.
+- Relay (on/off) tracking, electricity meters only: `relay_state`
+  (`connected` | `disconnected` | `unknown`), `relay_state_at`,
+  `relay_last_action_by`, `relay_last_action_response` (raw LONGi response
+  from the last relay call). Written only via `lib/meter-relay.ts`'s
+  `setMeterRelayState()` (relay open/closed, LONGi Chapters 10–11) and
+  `refreshMeterStatuses()` (bulk status pull, Chapter 12 + Communication API
+  Ch. 4), using the admin (service-role) client with an explicit
+  admin/landlord-portfolio ownership check — same bypass-with-explicit-checks
+  pattern as `token_purchases`. Surfaced via the `setMeterRelay` /
+  `refreshMeterStatusesAction` server actions
+  (`app/(dashboard)/dashboard/meters/relay-actions.ts`, shared by both
+  portals). Every successful relay action also writes an `activity_logs` row
+  (`action: "meter.relay_connected" | "meter.relay_disconnected"`).
+- `meter_directory` now also attaches a tenant when the meter is linked via
+  `tenants.electricity_meter_id`, not just `tenants.meter_id` (previously
+  electricity meters showed no tenant/unit in the admin/landlord Meters
+  lists).
+- Electricity readings, electricity meters only: `latest_daily_consumption_kwh`,
+  `latest_balance_kwh`, `latest_voltage`, `power_failure_count` — pulled via LONGi's
+  Communication API Chapter 5 (`communicationwithdevice`, four OBIS registers) and
+  decoded from A-XDR by `lib/longi-vending.ts`'s `decodeAxdrValue()`. Written by
+  `lib/meter-readings.ts`'s `refreshMeterReadings()`, called alongside
+  `refreshMeterStatuses()` from the same `refreshMeterStatusesAction` server action —
+  one "Refresh status" click updates connectivity, relay state, and readings together.
+- The same migration added `electricity_meter_relay_state` and
+  `electricity_meter_relay_state_at` to `tenant_directory`, so the relay's
+  on/off state is visible alongside a tenant's electricity meter without an
+  extra join.
 
 ### 4.4 Tenants & water billing
 
@@ -174,7 +203,8 @@ The schema is grouped into eight domains:
   token / payout. Alerts derived from the meter / tenant / payment data
   (see `lib/landlord-alerts-data.ts`) are written here.
 - `activity_logs` — admin-only audit trail keyed by `actor_profile_id`,
-  `action`, `target_table`/`target_id`.
+  `action`, `target_table`/`target_id`. First real writer: `lib/meter-relay.ts`
+  (`meter.relay_connected` / `meter.relay_disconnected`).
 
 ### 4.8 Settings + integration cache
 

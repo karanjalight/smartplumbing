@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import {
   fetchMeterRows,
   getMeterRows,
+  isElectricityMeter,
   meterTypeLabel,
   TABLE_PAGE_SIZE_OPTIONS,
   utilityOfModelType,
@@ -37,6 +38,8 @@ import {
   type MeterRow,
   type MeterUtility,
 } from "@/lib/meters-data";
+import { MeterRelayToggle } from "@/components/meters/meter-relay-toggle";
+import { RefreshMeterStatusButton } from "@/components/meters/refresh-meter-status-button";
 import { tryGetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -118,6 +121,19 @@ function connectivityBadge(connectivity: MeterConnectivity) {
       {connectivity}
     </span>
   );
+}
+
+function meterReadingDisplay(row: MeterRow): string {
+  if (!isElectricityMeter(row)) {
+    return row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m³`;
+  }
+  const parts = [
+    row.dailyConsumptionKwh != null
+      ? `${row.dailyConsumptionKwh.toLocaleString("en-KE")} kWh today`
+      : null,
+    row.balanceKwh != null ? `${row.balanceKwh.toLocaleString("en-KE")} kWh left` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 function meterNeedsAttention(row: MeterRow): boolean {
@@ -293,7 +309,11 @@ export function MetersView() {
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <RefreshMeterStatusButton
+            meterNos={filtered.map((r) => r.meterId)}
+            onDone={() => void load()}
+          />
           <Link
             href="/dashboard/meters/import"
             className={cn(
@@ -686,9 +706,7 @@ export function MetersView() {
                     <td className="px-4 py-3 font-medium text-foreground">{meterTypeLabel(row.modelType)}</td>
                     <td className="px-4 py-3 tabular-nums text-foreground">{row.installedOn}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">
-                        {row.latestReadingM3 == null ? "—" : `${row.latestReadingM3.toLocaleString("en-KE")} m³`}
-                      </div>
+                      <div className="font-medium text-foreground">{meterReadingDisplay(row)}</div>
                       <div className="text-xs text-muted-foreground">Last sync {row.lastSyncAt}</div>
                     </td>
                     <td className="px-4 py-3">{connectivityBadge(row.connectivity)}</td>
@@ -746,6 +764,20 @@ export function MetersView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
+                        {isElectricityMeter(row) ? (
+                          <MeterRelayToggle
+                            key={`${row.meterId}-${row.relayState}`}
+                            meterNo={row.meterId}
+                            relayState={row.relayState}
+                            onChanged={(next) =>
+                              setAllRows((prev) =>
+                                prev.map((r) =>
+                                  r.meterId === row.meterId ? { ...r, relayState: next } : r
+                                )
+                              )
+                            }
+                          />
+                        ) : null}
                         {row.tenantId ? (
                           <Link
                             href={`/dashboard/tenants/${encodeURIComponent(row.tenantId)}`}

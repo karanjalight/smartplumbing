@@ -8,9 +8,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { DepositsLedger } from "@/components/billing/deposits-ledger";
 import { HouseDialog } from "@/components/dashboard/house-dialog";
+import { TenantDepositConfig } from "@/components/dashboard/tenant-deposit-config";
+import { UnitPricingConfig } from "@/components/dashboard/unit-pricing-config";
 import { Button } from "@/components/ui/button";
 import type { HouseUnitRow } from "@/lib/buildings-data";
+import { applicableDepositKinds, type DepositKind } from "@/lib/billing/deposits";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { UnitDetail } from "@/lib/units/queries";
 import { unitPhotoUrl, unitTypeLabel } from "@/lib/units/labels";
@@ -33,6 +37,26 @@ export function UnitDetailView({
 
   const base = portal === "landlord" ? "/landlords/dashboard" : "/dashboard";
   const rentValue = unit.rent_kes ?? building?.rent_kes ?? null;
+
+  const payableKinds: DepositKind[] = detail.tenantDeposit
+    ? applicableDepositKinds({
+        tenantId: detail.tenantDeposit.id,
+        landlordId: detail.tenantDeposit.landlordId,
+        leaseId: null,
+        hasWaterMeter: detail.tenantDeposit.hasWaterMeter,
+        hasElectricityMeter: detail.tenantDeposit.hasElectricityMeter,
+        paysWaterDeposit: detail.tenantDeposit.paysWaterDeposit,
+        paysElectricityDeposit: detail.tenantDeposit.paysElectricityDeposit,
+        paysRentDeposit: detail.tenantDeposit.paysRentDeposit,
+        waterMeterDepositKes: unit.water_meter_deposit_kes,
+        electricityMeterDepositKes: unit.electricity_meter_deposit_kes,
+        rentDepositKes: unit.rent_deposit_kes,
+      })
+    : [];
+  const chargedKinds = new Set(
+    (detail.tenantDepositsSummary?.perKind ?? []).map((k) => k.kind)
+  );
+  const chargeableKinds = payableKinds.filter((k) => !chargedKinds.has(k));
 
   const houseForDialog: HouseUnitRow = {
     id: unit.id,
@@ -161,6 +185,49 @@ export function UnitDetailView({
               </p>
             )}
           </div>
+
+          <UnitPricingConfig
+            unitId={unit.id}
+            initial={{
+              rentKes: unit.rent_kes,
+              rentDepositKes: unit.rent_deposit_kes,
+              waterMeterDepositKes: unit.water_meter_deposit_kes,
+              electricityMeterDepositKes: unit.electricity_meter_deposit_kes,
+            }}
+          />
+
+          {detail.tenantDeposit ? (
+            <TenantDepositConfig
+              tenantId={detail.tenantDeposit.id}
+              landlordId={detail.tenantDeposit.landlordId}
+              hasWaterMeter={detail.tenantDeposit.hasWaterMeter}
+              hasElectricityMeter={detail.tenantDeposit.hasElectricityMeter}
+              prices={{
+                waterMeterDepositKes: unit.water_meter_deposit_kes,
+                electricityMeterDepositKes: unit.electricity_meter_deposit_kes,
+                rentDepositKes: unit.rent_deposit_kes,
+              }}
+              initial={{
+                paysWaterDeposit: detail.tenantDeposit.paysWaterDeposit,
+                paysElectricityDeposit: detail.tenantDeposit.paysElectricityDeposit,
+                paysRentDeposit: detail.tenantDeposit.paysRentDeposit,
+              }}
+            />
+          ) : (
+            <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+              Assign a tenant to choose which deposits they pay.
+            </p>
+          )}
+
+          {detail.tenantDeposit && detail.tenantDepositsSummary ? (
+            <DepositsLedger
+              tenantId={detail.tenantDeposit.id}
+              landlordId={detail.tenantDeposit.landlordId}
+              summary={detail.tenantDepositsSummary}
+              payableKinds={payableKinds}
+              chargeableKinds={chargeableKinds}
+            />
+          ) : null}
         </div>
 
         {/* Photos */}

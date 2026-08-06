@@ -5,9 +5,18 @@ import { revalidatePath } from "next/cache";
 
 import { z } from "zod";
 
+import {
+  buildDepositEntries,
+  chargedDepositKinds,
+  recordDepositPayment,
+  type DepositContext,
+  type DepositKind,
+} from "@/lib/billing/deposits";
+import { insertLedgerEntries, refreshTenantBalance } from "@/lib/billing/queries";
 import { buildTenantImpact } from "@/lib/delete/impact";
 import type { DeletePreviewResult } from "@/lib/delete/types";
 import { resolveLandlordId } from "@/lib/landlords-data";
+import { getActiveLeaseForTenant } from "@/lib/leases/queries";
 import { utilityOfModelType, type MeterModelType } from "@/lib/meters-data";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requirePublicSupabaseConfig } from "@/lib/supabase/env";
@@ -93,6 +102,31 @@ const updateTenantSchema = z.object({
 const deleteTenantSchema = z.object({
   tenantId: uuidSchema,
   landlordId: z.string().min(1, "Landlord is required."),
+});
+
+const updateTenantDepositsSchema = z.object({
+  tenantId: uuidSchema,
+  landlordId: z.string().min(1, "Landlord is required."),
+  paysWaterDeposit: z.boolean(),
+  paysElectricityDeposit: z.boolean(),
+  paysRentDeposit: z.boolean(),
+});
+
+const chargeDepositsSchema = z.object({
+  tenantId: uuidSchema,
+  landlordId: z.string().min(1, "Landlord is required."),
+});
+
+const depositKindSchema = z.enum(["water", "electricity", "rent"]);
+const paymentMethodSchema = z.enum(["M-Pesa", "Bank", "Cash", "STS credit", "Card"]);
+
+const recordDepositPaymentSchema = z.object({
+  tenantId: uuidSchema,
+  landlordId: z.string().min(1, "Landlord is required."),
+  kind: depositKindSchema,
+  amountKes: z.number().positive("Amount must be greater than zero."),
+  method: paymentMethodSchema,
+  reference: z.string().trim().max(120).optional().nullable(),
 });
 
 export type CreateTenantAccountResult =
@@ -934,4 +968,146 @@ export async function previewDeleteTenant(input: unknown): Promise<DeletePreview
       tokens: tokens.count ?? 0,
     }),
   };
+}
+
+export async function updateTenantDeposits(input: unknown): Promise<ActionResult> {
+  const parsed = updateTenantDepositsSchema.safeParse(input);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return { ok: false, error: msg };
+  }
+
+  const { tenantId, landlordId, paysWaterDeposit, paysElectricityDeposit, paysRentDeposit } =
+    parsed.data;
+
+  const actor = await assertPortfolioActor(landlordId);
+  if (!actor.ok) {
+    return { ok: false, error: actor.error };
+  }
+  const admin = actor.admin;
+
+  // Confirm the tenant belongs to the resolved landlord before writing.
+  const { data: existing, error: loadErr } = await admin
+    .from("tenants")
+    .select("id, landlord_id")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (loadErr) return { ok: false, error: loadErr.message };
+  if (!existing || existing.landlord_id !== actor.landlordId) {
+    return { ok: false, error: "Tenant not found." };
+  }
+
+  const { error: updateErr } = await admin
+    .from("tenants")
+    .update({
+      pays_water_deposit: paysWaterDeposit,
+      pays_electricity_deposit: paysElectricityDeposit,
+      pays_rent_deposit: paysRentDeposit,
+    })
+    .eq("id", tenantId);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  revalidatePath("/dashboard/tenants");
+  revalidatePath(`/dashboard/tenants/${tenantId}`);
+  revalidatePath("/landlords/dashboard/tenants");
+  revalidatePath(`/landlords/dashboard/tenants/${tenantId}`);
+  return { ok: true };
+}
+
+/** Load the tenant's deposit charge context (pays flags, unit prices, lease). */
+async function loadDepositContext(
+  admin: ReturnType<typeof getSupabaseAdminClient>,
+  tenantId: string,
+  landlordId: string,
+): Promise<DepositContext | null> {
+  const { data: tenant, error } = await admin
+    .from("tenants")
+    .select("id, landlord_id, unit_id, meter_id, electricity_meter_id, pays_water_deposit, pays_electricity_deposit, pays_rent_deposit")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!tenant || tenant.landlord_id !== landlordId) return null;
+
+  let waterPrice: number | null = null;
+  let elecPrice: number | null = null;
+  let rentPrice: number | null = null;
+  if (tenant.unit_id) {
+    const { data: unit } = await admin
+      .from("units")
+      .select("water_meter_deposit_kes, electricity_meter_deposit_kes, rent_deposit_kes")
+      .eq("id", tenant.unit_id)
+      .maybeSingle();
+    waterPrice = unit?.water_meter_deposit_kes != null ? Number(unit.water_meter_deposit_kes) : null;
+    elecPrice = unit?.electricity_meter_deposit_kes != null ? Number(unit.electricity_meter_deposit_kes) : null;
+    rentPrice = unit?.rent_deposit_kes != null ? Number(unit.rent_deposit_kes) : null;
+  }
+  const lease = await getActiveLeaseForTenant(admin, tenantId);
+  return {
+    tenantId: tenant.id,
+    landlordId,
+    leaseId: lease?.id ?? null,
+    hasWaterMeter: tenant.meter_id != null,
+    hasElectricityMeter: tenant.electricity_meter_id != null,
+    paysWaterDeposit: tenant.pays_water_deposit,
+    paysElectricityDeposit: tenant.pays_electricity_deposit,
+    paysRentDeposit: tenant.pays_rent_deposit,
+    waterMeterDepositKes: waterPrice,
+    electricityMeterDepositKes: elecPrice,
+    rentDepositKes: rentPrice,
+  };
+}
+
+function revalidateTenantDeposits(tenantId: string): void {
+  revalidatePath("/dashboard/tenants");
+  revalidatePath(`/dashboard/tenants/${tenantId}`);
+  revalidatePath("/landlords/dashboard/tenants");
+  revalidatePath(`/landlords/dashboard/tenants/${tenantId}`);
+}
+
+export async function chargeDeposits(input: unknown): Promise<ActionResult> {
+  const parsed = chargeDepositsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { tenantId, landlordId } = parsed.data;
+  const actor = await assertPortfolioActor(landlordId);
+  if (!actor.ok) return { ok: false, error: actor.error };
+
+  const ctx = await loadDepositContext(actor.admin, tenantId, actor.landlordId);
+  if (!ctx) return { ok: false, error: "Tenant not found." };
+
+  const already = await chargedDepositKinds(actor.admin, tenantId);
+  const entries = buildDepositEntries(ctx, already);
+  if (entries.length === 0) {
+    return { ok: false, error: "Nothing new to charge." };
+  }
+  await insertLedgerEntries(actor.admin, entries);
+  await refreshTenantBalance(actor.admin, tenantId);
+  revalidateTenantDeposits(tenantId);
+  return { ok: true };
+}
+
+export async function recordDepositPaymentAction(input: unknown): Promise<ActionResult> {
+  const parsed = recordDepositPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { tenantId, landlordId, kind, amountKes, method, reference } = parsed.data;
+  const actor = await assertPortfolioActor(landlordId);
+  if (!actor.ok) return { ok: false, error: actor.error };
+
+  const ctx = await loadDepositContext(actor.admin, tenantId, actor.landlordId);
+  if (!ctx) return { ok: false, error: "Tenant not found." };
+
+  await recordDepositPayment(actor.admin, {
+    tenantId,
+    landlordId: actor.landlordId,
+    leaseId: ctx.leaseId,
+    kind: kind as DepositKind,
+    amountKes,
+    method,
+    reference: reference ?? null,
+  });
+  revalidateTenantDeposits(tenantId);
+  return { ok: true };
 }

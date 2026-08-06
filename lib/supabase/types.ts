@@ -37,6 +37,7 @@ export type MeterConnectivity =
   | "offline"
   | "intermittent"
   | "unknown";
+export type MeterRelayState = "connected" | "disconnected" | "unknown";
 export type MeterModelType =
   | "water_prepay_m3"
   | "water_prepay_currency"
@@ -44,7 +45,7 @@ export type MeterModelType =
   | "electricity_prepay_kwh"
   | "electricity_prepay_currency";
 export type PaymentMethod = "M-Pesa" | "Bank" | "Cash" | "STS credit" | "Card";
-export type PaymentCategory = "rent" | "tokens" | "service" | "shop";
+export type PaymentCategory = "rent" | "tokens" | "service" | "shop" | "deposit";
 export type PaymentStatus =
   | "pending"
   | "completed"
@@ -187,6 +188,9 @@ export type UnitRow = Timestamps & {
   rent_kes: number | null;
   is_vacant: boolean;
   unit_type: UnitType | null;
+  water_meter_deposit_kes: number | null;
+  electricity_meter_deposit_kes: number | null;
+  rent_deposit_kes: number | null;
 }
 
 export type UnitImageRow = {
@@ -229,6 +233,14 @@ export type MeterRow = Timestamps & {
   last_sync_at: string | null;
   open_alerts: number;
   notes: string | null;
+  relay_state: MeterRelayState;
+  relay_state_at: string | null;
+  relay_last_action_by: string | null;
+  relay_last_action_response: Json | null;
+  latest_daily_consumption_kwh: number | null;
+  latest_balance_kwh: number | null;
+  latest_voltage: number | null;
+  power_failure_count: number | null;
 }
 
 export type TenantRow = Timestamps & {
@@ -257,6 +269,9 @@ export type TenantRow = Timestamps & {
   national_id: string | null;
   kra_pin: string | null;
   deposit_amount_paid: number | null;
+  pays_water_deposit: boolean;
+  pays_electricity_deposit: boolean;
+  pays_rent_deposit: boolean;
   secondary_phones: string | null;
 }
 
@@ -794,6 +809,8 @@ export type Database = {
           unit_label: string | null;
           meter_no: string | null;
           electricity_meter_no: string | null;
+          electricity_meter_relay_state: MeterRelayState | null;
+          electricity_meter_relay_state_at: string | null;
         }
       >;
       meter_directory: ViewDef<
@@ -826,6 +843,7 @@ export type Database = {
       unit_type: UnitType;
       meter_lifecycle: MeterLifecycle;
       meter_connectivity: MeterConnectivity;
+      meter_relay_state: MeterRelayState;
       meter_model_type: MeterModelType;
       payment_method: PaymentMethod;
       payment_category: PaymentCategory;

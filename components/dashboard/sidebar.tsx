@@ -78,7 +78,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { href: "/dashboard/meters", label: "All Meters", icon: Gauge },
       { href: "/dashboard/meters/onboard", label: "Onboard Meter", icon: PlusCircle },
-        // { href: "/dashboard/meter-health", label: "Meter Health", icon: Activity },
+      { href: "/dashboard/meter-health", label: "Meter Health", icon: Activity },
         // { href: "/dashboard/valve-control", label: "Valve Control", icon: SlidersHorizontal },
     ],
   },
